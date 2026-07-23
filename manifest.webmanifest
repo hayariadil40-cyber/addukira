@@ -1,0 +1,13 @@
+{
+  "name": "Al-Maktaba",
+  "short_name": "Maktaba",
+  "description": "Archivio di studio dell'Islam e compagno quotidiano",
+  "lang": "it",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f1e1a",
+  "theme_color": "#0f1e1a",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1e1a">
+<title>Al-Maktaba</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Spectral:wght@400;500;600&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+<aside class="rail" id="rail">
+  <div class="brand">
+    <svg viewBox="0 0 40 40" fill="none"><path d="M20 3l14.7 8.5v17L20 37 5.3 28.5v-17z" stroke="#d3b573" stroke-width="1.3"/><circle cx="20" cy="20" r="2.6" fill="#d3b573"/></svg>
+    <div><div class="n">Al-Maktaba</div><div class="ar">المكتبة</div></div>
+  </div>
+  <div class="grp">La mia vita</div>
+  <div class="lnk on" data-p="oggi"><span class="e">☀️</span>Oggi</div>
+  <div class="lnk" data-p="lettura"><span class="e">📖</span>Lettura</div>
+  <div class="lnk" data-p="memorizzazione"><span class="e">🧠</span>Memorizzazione</div>
+  <div class="lnk" data-p="pensieri"><span class="e">💭</span>Pensieri <span class="c" id="c-pens"></span></div>
+  <div class="grp">Lo studio</div>
+  <div class="lnk" data-p="quran"><span class="e">🕋</span>Corano <span class="c" id="c-quran"></span></div>
+  <div class="lnk" data-p="hadith"><span class="e">📜</span>Hadith <span class="c" id="c-hadith"></span></div>
+  <div class="lnk" data-p="people"><span class="e">👤</span>Personaggi <span class="c" id="c-people"></span></div>
+  <div class="lnk" data-p="stories"><span class="e">🏜️</span>Storie <span class="c" id="c-stories"></span></div>
+  <div class="lnk" data-p="themes"><span class="e">🧵</span>Temi <span class="c" id="c-themes"></span></div>
+  <div class="lnk" data-p="fiqh"><span class="e">⚖️</span>Fiqh <span class="c" id="c-fiqh"></span></div>
+  <div class="foot">v1 · dati salvati in locale<br>Passo 2: Supabase (solo store.js)<br>Roadmap: Dashboard · deploy</div>
+</aside>
+
+<main class="main">
+  <div class="bar">
+    <button class="mb" id="mb">☰</button>
+  </div>
+  <div class="wrap" id="wrap">
+    <section class="page on" id="p-oggi">
+      <div id="oggi-head"></div>
+      <div class="widgets" id="oggi-widgets"></div>
+      <div id="oggi-giornata"></div>
+    </section>
+    <section class="page" id="p-lettura"></section>
+    <section class="page" id="p-memorizzazione"></section>
+    <section class="page" id="p-pensieri"></section>
+    <section class="page" id="p-quran"></section>
+    <section class="page" id="p-hadith"></section>
+    <section class="page" id="p-people"></section>
+    <section class="page" id="p-stories"></section>
+    <section class="page" id="p-themes"></section>
+    <section class="page" id="p-fiqh"></section>
+    <section class="page" id="p-search"></section>
+    <section class="page" id="p-detail"></section>
+  </div>
+</main>
+</div>
+
+<div class="veil" id="veil">
+  <div class="modal">
+    <h2>Nuova voce</h2>
+    <div class="s">I campi rispecchiano le tabelle Supabase.</div>
+    <div class="f"><label>Tipo</label>
+      <select id="m-type">
+        <option value="pensiero">Pensiero</option>
+        <option value="adhkar">Dhikr / abitudine del giorno</option>
+        <option value="versetto">Versetto</option>
+        <option value="hadith">Hadith</option>
+        <option value="personaggio">Personaggio</option>
+        <option value="storia">Storia</option>
+        <option value="tema">Tema</option>
+        <option value="fiqh">Fiqh</option>
+      </select>
+    </div>
+    <div id="m-fields"></div>
+    <div class="m-act"><button class="btn2" id="btn-cancel">Annulla</button><button class="add" id="btn-save">Salva</button></div>
+  </div>
+</div>
+<div class="veil" id="veil-pensiero">
+  <div class="modal">
+    <h2>Aggiungi un pensiero</h2>
+    <div class="s">Scrivilo e, se vuoi, collegalo a ciò da cui nasce.</div>
+    <div class="f"><label>Il pensiero</label><textarea id="pt-testo" placeholder="Cosa hai capito, notato, sentito…"></textarea></div>
+    <div class="row2">
+      <div class="f"><label>Collegato a</label>
+        <select id="pt-tipo">
+          <option value="">Niente — nato dalla giornata</option>
+          <option value="versetto">Un versetto</option>
+          <option value="sura">Una sura</option>
+          <option value="personaggio">Un personaggio</option>
+          <option value="tema">Un tema</option>
+          <option value="hadith">Un hadith</option>
+          <option value="storia">Una storia</option>
+          <option value="azione">Un dhikr / azione</option>
+        </select>
+      </div>
+      <div class="f"><label>Quale</label><select id="pt-target" disabled><option value="">—</option></select></div>
+    </div>
+    <div class="m-act"><button class="btn2" id="pt-cancel">Annulla</button><button class="add" id="pt-save">Salva pensiero</button></div>
+  </div>
+</div>
+<div class="veil" id="veil-khatam">
+  <div class="modal khatam-modal">
+    <div class="kh-badge">۩</div>
+    <h2>Congratulazioni</h2>
+    <div class="s">Hai completato una lettura integrale del Corano.</div>
+    <div class="dua-box">
+      <div class="dua-ar" dir="rtl">اللَّهُمَّ ارْحَمْنِي بِالْقُرْآنِ، وَاجْعَلْهُ لِي إِمَامًا وَنُورًا وَهُدًى وَرَحْمَةً، اللَّهُمَّ ذَكِّرْنِي مِنْهُ مَا نَسِيتُ، وَعَلِّمْنِي مِنْهُ مَا جَهِلْتُ، وَارْزُقْنِي تِلَاوَتَهُ آنَاءَ اللَّيْلِ وَأَطْرَافَ النَّهَارِ، وَاجْعَلْهُ لِي حُجَّةً يَا رَبَّ الْعَالَمِينَ</div>
+      <div class="dua-it">«O Allah, abbi misericordia di me tramite il Corano; rendilo per me guida, luce, retta via e misericordia. O Allah, ricordami ciò che ho dimenticato di esso, insegnami ciò che ignoro, concedimi di recitarlo nelle ore della notte e ai margini del giorno, e rendilo per me una prova, o Signore dei mondi.»</div>
+    </div>
+    <div class="f"><label>Un pensiero su questo khatam</label><textarea id="kh-thought" placeholder="Cosa ti lascia questa lettura…"></textarea></div>
+    <div class="m-act"><button class="btn2" id="kh-close">Chiudi</button><button class="add" id="kh-save">Salva pensiero</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="js/store.js"></script>
+<script src="js/widgets.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
