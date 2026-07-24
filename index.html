@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0f1e1a">
-<title>Al-Maktaba</title>
+<title>Addukira</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,20 +17,30 @@
 <aside class="rail" id="rail">
   <div class="brand">
     <svg viewBox="0 0 40 40" fill="none"><path d="M20 3l14.7 8.5v17L20 37 5.3 28.5v-17z" stroke="#d3b573" stroke-width="1.3"/><circle cx="20" cy="20" r="2.6" fill="#d3b573"/></svg>
-    <div><div class="n">Al-Maktaba</div><div class="ar">المكتبة</div></div>
+    <div><div class="n">Addukira</div><div class="ar">ادَّكَرَ</div></div>
   </div>
-  <div class="grp">La mia vita</div>
-  <div class="lnk on" data-p="oggi"><span class="e">☀️</span>Oggi</div>
-  <div class="lnk" data-p="lettura"><span class="e">📖</span>Lettura</div>
-  <div class="lnk" data-p="memorizzazione"><span class="e">🧠</span>Memorizzazione</div>
-  <div class="lnk" data-p="pensieri"><span class="e">💭</span>Pensieri <span class="c" id="c-pens"></span></div>
-  <div class="grp">Lo studio</div>
-  <div class="lnk" data-p="quran"><span class="e">🕋</span>Corano <span class="c" id="c-quran"></span></div>
-  <div class="lnk" data-p="hadith"><span class="e">📜</span>Hadith <span class="c" id="c-hadith"></span></div>
-  <div class="lnk" data-p="people"><span class="e">👤</span>Personaggi <span class="c" id="c-people"></span></div>
-  <div class="lnk" data-p="stories"><span class="e">🏜️</span>Storie <span class="c" id="c-stories"></span></div>
-  <div class="lnk" data-p="themes"><span class="e">🧵</span>Temi <span class="c" id="c-themes"></span></div>
-  <div class="lnk" data-p="fiqh"><span class="e">⚖️</span>Fiqh <span class="c" id="c-fiqh"></span></div>
+  <div class="grp" data-i18n="nav.group.life">La mia vita</div>
+  <div class="lnk on" data-p="oggi"><span class="e">☀️</span><span data-i18n="nav.oggi">Oggi</span></div>
+  <div class="lnk" data-p="lettura"><span class="e">📖</span><span data-i18n="nav.lettura">Lettura</span></div>
+  <div class="lnk" data-p="memorizzazione"><span class="e">🧠</span><span data-i18n="nav.memorizzazione">Memorizzazione</span></div>
+  <div class="lnk" data-p="pensieri"><span class="e">💭</span><span data-i18n="nav.pensieri">Pensieri</span> <span class="c" id="c-pens"></span></div>
+  <div class="grp" data-i18n="nav.group.study">Lo studio</div>
+  <div class="lnk lnk-allah" data-p="allah"><span class="e">ﷲ</span><span data-i18n="nav.allah">Allah</span> <span class="c" id="c-allah"></span></div>
+  <div class="lnk" data-p="quran"><span class="e">🕋</span><span data-i18n="nav.quran">Corano</span> <span class="c" id="c-quran"></span></div>
+  <div class="lnk" data-p="hadith"><span class="e">📜</span><span data-i18n="nav.hadith">Hadith</span> <span class="c" id="c-hadith"></span></div>
+  <div class="lnk" data-p="people"><span class="e">👤</span><span data-i18n="nav.people">Personaggi</span> <span class="c" id="c-people"></span></div>
+  <div class="lnk" data-p="stories"><span class="e">🏜️</span><span data-i18n="nav.stories">Storie</span> <span class="c" id="c-stories"></span></div>
+  <div class="lnk" data-p="themes"><span class="e">🧵</span><span data-i18n="nav.themes">Temi</span> <span class="c" id="c-themes"></span></div>
+  <div class="lnk" data-p="fiqh"><span class="e">⚖️</span><span data-i18n="nav.fiqh">Fiqh</span> <span class="c" id="c-fiqh"></span></div>
+  <div class="lnk" data-p="azioni"><span class="e">🤲</span><span data-i18n="nav.azioni">Azioni</span> <span class="c" id="c-azioni"></span></div>
+  <div class="lnk" data-p="segni_ora"><span class="e">⏳</span><span data-i18n="nav.segni_ora">Segni dell'Ora</span> <span class="c" id="c-segni_ora"></span></div>
+  <div class="lnk" data-p="creazione"><span class="e">🌌</span><span data-i18n="nav.creazione">La creazione</span> <span class="c" id="c-creazione"></span></div>
+  <div class="lnk" data-p="luoghi"><span class="e">🕌</span><span data-i18n="nav.luoghi">Luoghi</span> <span class="c" id="c-luoghi"></span></div>
+  <div class="lnk lnk-set" data-p="impostazioni"><span class="e">⚙️</span><span data-i18n="nav.impostazioni">Impostazioni</span></div>
+  <div class="langbar">
+    <button class="langb" data-lang-btn="it">IT</button>
+    <button class="langb" data-lang-btn="ar">عربي</button>
+  </div>
   <div class="foot">v1 · dati salvati in locale<br>Passo 2: Supabase (solo store.js)<br>Roadmap: Dashboard · deploy</div>
 </aside>
 
@@ -47,12 +57,18 @@
     <section class="page" id="p-lettura"></section>
     <section class="page" id="p-memorizzazione"></section>
     <section class="page" id="p-pensieri"></section>
+    <section class="page" id="p-allah"></section>
     <section class="page" id="p-quran"></section>
     <section class="page" id="p-hadith"></section>
     <section class="page" id="p-people"></section>
     <section class="page" id="p-stories"></section>
     <section class="page" id="p-themes"></section>
     <section class="page" id="p-fiqh"></section>
+    <section class="page" id="p-azioni"></section>
+    <section class="page" id="p-segni_ora"></section>
+    <section class="page" id="p-creazione"></section>
+    <section class="page" id="p-luoghi"></section>
+    <section class="page" id="p-impostazioni"></section>
     <section class="page" id="p-search"></section>
     <section class="page" id="p-detail"></section>
   </div>
@@ -118,6 +134,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="js/store.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/widgets.js"></script>
 <script src="js/app.js"></script>
 </body>

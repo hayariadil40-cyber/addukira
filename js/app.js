@@ -6,12 +6,33 @@
 const $ = s => document.querySelector(s);
 const esc = s => (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const GRADO = { sahih: '🟢 Ṣaḥīḥ', hasan: 'Ḥasan', daif: 'Ḍaʿīf', qudsi: 'Qudsī', non_verificato: 'da verificare' };
-const CAT = { profeta: 'Profeta', sahaba: 'Ṣaḥāba', sapiente: 'Sapiente', madre_credenti: 'Madre dei credenti', angelo: 'Angelo', jinn: 'Jinn', figura_tipo: 'Figura-tipo', altro: 'Altro' };
+/* etichetta singola (badge card / dettaglio / form) */
+const CAT = {
+  muhammad: 'Il Profeta Muḥammad ﷺ',
+  profeta:  'Profeta',
+  sahaba:   'Ṣaḥāba',
+  madre_credenti: 'Madre dei credenti',
+  nemico:   'Nemico',
+  angelo:   'Angelo',
+  jinn:     'Jinn',
+  sapiente: 'Sapiente',
+  altro:    'Altro',
+};
+/* sezioni della pagina Personaggi (Muḥammad ﷺ è a parte, in cima) */
+const PERS_SEZIONI = [
+  { k: 'profeta',  t: 'I Profeti',  ico: '🕊️' },
+  { k: 'sahaba',         t: 'I Ṣaḥāba',           ico: '🤝' },
+  { k: 'madre_credenti', t: 'Le Madri dei credenti', ico: '🌸' },
+  { k: 'nemico',         t: 'I Nemici',           ico: '⚔️' },
+  { k: 'angelo',   t: 'Gli Angeli', ico: '👼' },
+  { k: 'jinn',     t: 'I Jinn',     ico: '🔥' },
+  { k: 'sapiente', t: 'I Sapienti', ico: '📚' },
+];
 const suraOf = id => store.get('sure', id);
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2100); }
 
 /* ---- navigazione ---- */
-const PAGES = ['oggi', 'lettura', 'memorizzazione', 'pensieri', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'search', 'detail'];
+const PAGES = ['oggi', 'lettura', 'memorizzazione', 'pensieri', 'allah', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'azioni', 'segni_ora', 'creazione', 'luoghi', 'impostazioni', 'search', 'detail'];
 function show(p) { PAGES.forEach(x => $('#p-' + x).classList.remove('on')); $('#p-' + p).classList.add('on'); window.scrollTo(0, 0); }
 function nav(p) {
   document.querySelectorAll('.lnk').forEach(l => l.classList.toggle('on', l.dataset.p === p));
@@ -22,12 +43,17 @@ $('#mb').onclick = () => $('#rail').classList.toggle('open');
 
 function counts() {
   $('#c-pens').textContent = store.list('pensieri').length;
+  $('#c-allah').textContent = store.list('asma').length;
   $('#c-quran').textContent = store.list('sure').length;
   $('#c-hadith').textContent = store.list('hadith').length;
   $('#c-people').textContent = store.list('personaggi').length;
   $('#c-stories').textContent = store.list('storie').length;
   $('#c-themes').textContent = store.list('temi').length;
   $('#c-fiqh').textContent = store.list('fiqh').length;
+  $('#c-azioni').textContent = store.list('azioni').length;
+  $('#c-segni_ora').textContent = store.list('segni_ora').length;
+  $('#c-creazione').textContent = store.list('creazione').length;
+  $('#c-luoghi').textContent = store.list('luoghi').length;
 }
 function head(e, t, s) { return `<div class="eye">${e}</div><h1 class="t">${t}</h1><p class="sub">${s}</p>`; }
 
@@ -47,34 +73,47 @@ function pillLinks(a) {
   return out ? `<div class="why">${out}</div>` : '';
 }
 
-function hijriToday(d) {
-  try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }).format(d); }
+function hijriToday(d, offset) {
+  const dd = new Date(d.getTime() + (offset || 0) * 86400000);
+  try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }).format(dd); }
   catch (e) {
-    try { return new Intl.DateTimeFormat('ar-TN-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(d); }
+    try { return new Intl.DateTimeFormat('ar-TN-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(dd); }
     catch (_) { return 'التقويم الهجري'; }
   }
 }
 
-/* intestazione condivisa: data ita (sinistra) + data hijri (destra) */
+/* intestazione condivisa: data ita (sinistra) + data hijri (destra, se attiva) */
 function dayHeader(title) {
-  const d = new Date();
+  const S = store.getSettings(), d = new Date();
   const giorni = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
   const mesi = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
-  return `<div class="day-head"><div><div class="eye">${giorni[d.getDay()]} ${d.getDate()} ${mesi[d.getMonth()]} ${d.getFullYear()}</div><h1 class="t">${title}</h1></div><div class="hijri">${hijriToday(d)}</div></div>`;
+  const hj = S.tempo.hijri_mostra ? `<div class="hijri">${hijriToday(d, S.tempo.hijri_offset)}</div>` : '';
+  return `<div class="day-head"><div><div class="eye">${giorni[d.getDay()]} ${d.getDate()} ${mesi[d.getMonth()]} ${d.getFullYear()}</div><h1 class="t">${title}</h1></div>${hj}</div>`;
 }
 
 function renderOggi() {
   /* data + hijri */
   $('#oggi-head').innerHTML = dayHeader('La tua giornata');
 
-  /* widget sole · marea · luna — montati una sola volta */
+  /* widget sole · marea · luna — montati una sola volta, poi ridisegnati */
   const w = $('#oggi-widgets');
-  if (w && !w.innerHTML.trim()) { w.innerHTML = Widgets.markup(); Widgets.mount(); }
+  const vw = store.getSettings().vista.widget;
+  if (w) {
+    if (!w.innerHTML.trim()) { w.innerHTML = Widgets.markup(); Widgets.mount(); }
+    else Widgets.refresh();
+    const sky = $('#w-sky'), tc = $('#w-tide-card'), mc = $('#w-moon-card');
+    if (sky) sky.style.display = vw.arco ? '' : 'none';
+    if (tc) tc.style.display = vw.marea ? '' : 'none';
+    if (mc) mc.style.display = vw.luna ? '' : 'none';
+    w.style.display = (vw.arco || vw.marea || vw.luna) ? '' : 'none';
+  }
 
   /* La mia giornata */
+  const momAttivi = store.getSettings().vista.momenti;
   let html = `<div class="hd">La mia giornata</div>`;
 
   store.momenti.forEach(m => {
+    if (!momAttivi[m.k]) return;
     if (m.k === 'lettura') {
       const L = store.lettura(); const s = suraOf(L.sura_id);
       const pos = L.attivo
@@ -318,17 +357,454 @@ const sCard = s => { const su = suraOf(s.sura_id); return `<div class="card" onc
 const tCard = t => `<div class="card" onclick="openDetail('tema',${t.id})"><span class="k">Tema</span><h3>${esc(t.nome)}</h3><div class="arh">${esc(t.nome_arabo || '')}</div><p>${esc(t.descrizione || '')}</p></div>`;
 const fCard = f => `<div class="card" onclick="openDetail('fiqh',${f.id})"><span class="k">${esc(f.categoria)}</span><h3>${esc(f.titolo)}</h3><p>${esc(f.contenuto || '')}</p></div>`;
 
+/* ============================================================
+   CORANO — ricerca (sura + n° versetto + parole chiave) e sure
+   ============================================================ */
+function renderQuran() {
+  const suraOpts = '<option value="">Tutte le sure</option>' +
+    store.list('sure').map(s => `<option value="${s.id}">${s.numero} · ${esc(s.translit)} · ${esc(s.nome_arabo)}</option>`).join('');
+
+  let html = head('Corano · القرآن', 'Cerca e sfoglia', 'Cerca un versetto per sura e numero, o per parole chiave. Sotto, tutte le sure.');
+
+  html += `<div class="quran-search">
+    <div class="qs-grid">
+      <div class="qs-field qs-sura"><label>Sura</label>
+        <select id="qs-sura" onchange="quranSearch()">${suraOpts}</select></div>
+      <div class="qs-field qs-aya"><label>Versetto n°</label>
+        <input id="qs-aya" type="number" min="1" placeholder="es. 255" oninput="quranSearch()"></div>
+      <div class="qs-field qs-kw"><label>Parole chiave</label>
+        <input id="qs-kw" placeholder="Nel testo arabo o nella traduzione…" oninput="quranSearch()"></div>
+      <button class="qs-clear" onclick="quranClear()" title="Azzera">✕</button>
+    </div>
+  </div>
+  <div id="qs-results"></div>`;
+
+  html += `<div class="hd">Le sure</div><div class="grid">${
+    store.list('sure').map(s => `<div class="card" onclick="quranPickSura(${s.id})">
+      <span class="k">${s.numero} · ${esc(s.translit)}</span>
+      <div class="arh">${esc(s.nome_arabo)}</div>
+      <p>${esc(s.titolo_it)} · ${s.n_versetti} vv · ${esc(s.rivelazione)}</p></div>`).join('')
+  }</div>`;
+
+  $('#p-quran').innerHTML = html;
+}
+
+/* filtra i versetti per sura / numero / parole chiave e mostra i risultati */
+function quranSearch() {
+  const suraId = $('#qs-sura').value ? +$('#qs-sura').value : null;
+  const aya = $('#qs-aya').value ? +$('#qs-aya').value : null;
+  const kw = ($('#qs-kw').value || '').trim().toLowerCase();
+  const box = $('#qs-results');
+
+  if (!suraId && !aya && !kw) { box.innerHTML = ''; return; }   /* nessun criterio → nessun risultato */
+
+  let list = store.list('versetti');
+  if (suraId) list = list.filter(v => v.sura_id === suraId);
+  if (aya)    list = list.filter(v => v.numero === aya);
+  if (kw)     list = list.filter(v => (v.arabo + ' ' + v.traduzione + ' ' + (v.contesto || '')).toLowerCase().includes(kw));
+
+  if (!list.length) {
+    box.innerHTML = `<div class="empty">Nessun versetto trovato tra quelli caricati.<br>
+      <span class="mz-note">Il testo completo del Corano (6.236 versetti) arriverà con l'import: allora la ricerca coprirà tutto.</span></div>`;
+    return;
+  }
+  box.innerHTML = `<div class="qs-count">${list.length} versett${list.length === 1 ? 'o' : 'i'}</div>
+    <div class="grid">${list.map(vCard).join('')}</div>`;
+}
+function quranPickSura(id) { const s = $('#qs-sura'); if (s) { s.value = id; quranSearch(); window.scrollTo(0, 0); } }
+function quranClear() {
+  $('#qs-sura').value = ''; $('#qs-aya').value = ''; $('#qs-kw').value = '';
+  $('#qs-results').innerHTML = '';
+}
+
+/* ============================================================
+   PERSONAGGI — ricerca (categoria + parole chiave) e sezioni.
+   Muḥammad ﷺ ha un blocco a sé in cima; poi Profeti, Ṣaḥāba,
+   Nemici, Angeli, Jinn, Sapienti.
+   ============================================================ */
+/* blocco speciale del Profeta ﷺ */
+function mCard(p) {
+  return `<div class="pers-muhammad" onclick="openDetail('personaggio',${p.id})">
+    <div class="pm-seal">ﷺ</div>
+    <div class="pm-body">
+      <div class="pm-lab">Il Sigillo dei Profeti · خاتم النبيين</div>
+      <div class="pm-ar">${esc(p.nome_arabo || 'محمد ﷺ')}</div>
+      <h3>${esc(p.nome)}</h3>
+      <p>${esc(p.biografia || '')}</p>
+    </div></div>`;
+}
+
+function renderPeople() {
+  const catOpts = '<option value="">Tutte le categorie</option>'
+    + '<option value="muhammad">Il Profeta Muḥammad ﷺ</option>'
+    + PERS_SEZIONI.map(s => `<option value="${s.k}">${s.t}</option>`).join('');
+
+  let html = head('Personaggi · الأعلام', 'Cerca e sfoglia', 'Cerca per categoria o parole chiave. In cima il Profeta ﷺ, poi le categorie.');
+  html += `<div class="quran-search"><div class="qs-grid qs-grid-2">
+      <div class="qs-field"><label>Categoria</label>
+        <select id="pe-cat" onchange="peopleSearch()">${catOpts}</select></div>
+      <div class="qs-field qs-kw"><label>Parole chiave</label>
+        <input id="pe-kw" placeholder="Nome, biografia, fonte…" oninput="peopleSearch()"></div>
+      <button class="qs-clear" onclick="peopleClear()" title="Azzera">✕</button>
+    </div></div>
+  <div id="pe-list"></div>`;
+  $('#p-people').innerHTML = html;
+  peopleSearch();
+}
+
+function peopleSearch() {
+  const cat = $('#pe-cat').value;
+  const kw = ($('#pe-kw').value || '').trim().toLowerCase();
+  let list = store.list('personaggi');
+  if (kw) list = list.filter(p => (p.nome + ' ' + (p.nome_arabo || '') + ' ' + (p.biografia || '') + ' ' + (p.fonte || '')).toLowerCase().includes(kw));
+
+  const sez = k => list.filter(p => p.categoria === k);
+  let html = '';
+
+  /* Muḥammad ﷺ — in cima */
+  if (!cat || cat === 'muhammad') {
+    sez('muhammad').forEach(p => { html += mCard(p); });
+  }
+  /* categorie */
+  PERS_SEZIONI.forEach(s => {
+    if (cat && cat !== s.k) return;
+    const items = sez(s.k);
+    if (!items.length) return;
+    html += `<div class="hd">${s.ico} ${s.t} <span class="hd-c">${items.length}</span></div>
+      <div class="grid">${items.map(pCard).join('')}</div>`;
+  });
+  /* eventuali categorie non previste (dati vecchi) */
+  if (!cat) {
+    const known = ['muhammad', ...PERS_SEZIONI.map(s => s.k)];
+    const others = list.filter(p => !known.includes(p.categoria));
+    if (others.length) html += `<div class="hd">Altri <span class="hd-c">${others.length}</span></div>
+      <div class="grid">${others.map(pCard).join('')}</div>`;
+  }
+
+  $('#pe-list').innerHTML = html || `<div class="empty">Nessun personaggio trovato.</div>`;
+}
+function peopleClear() { $('#pe-cat').value = ''; $('#pe-kw').value = ''; peopleSearch(); }
+
+/* ============================================================
+   HADITH — ricerca (fonte + parole chiave) e lista
+   ============================================================ */
+function renderHadith() {
+  /* fonti = raccolte effettivamente presenti tra gli hadith inseriti */
+  const fonti = [...new Set(store.list('hadith').map(h => h.raccolta).filter(Boolean))].sort();
+  const fonteOpts = '<option value="">Tutte le fonti</option>' +
+    fonti.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+
+  let html = head('Hadith · الحديث', 'Cerca e sfoglia', 'Cerca per fonte (Bukhārī, Muslim, Tirmidhī…) o per parole chiave. Sotto, la lista.');
+  html += `<div class="quran-search"><div class="qs-grid qs-grid-2">
+      <div class="qs-field"><label>Fonte</label>
+        <select id="hs-fonte" onchange="hadithSearch()">${fonteOpts}</select></div>
+      <div class="qs-field qs-kw"><label>Parole chiave</label>
+        <input id="hs-kw" placeholder="Nel testo, nella nota, nell'isnād…" oninput="hadithSearch()"></div>
+      <button class="qs-clear" onclick="hadithClear()" title="Azzera">✕</button>
+    </div></div>
+  <div id="hd-list"></div>`;
+  $('#p-hadith').innerHTML = html;
+  hadithSearch();                                  /* prima resa: lista completa */
+}
+function hadithSearch() {
+  const fonte = $('#hs-fonte').value;
+  const kw = ($('#hs-kw').value || '').trim().toLowerCase();
+  let list = store.list('hadith');
+  if (fonte) list = list.filter(h => h.raccolta === fonte);
+  if (kw)    list = list.filter(h => (h.testo + ' ' + (h.nota || '') + ' ' + (h.isnad || '') + ' ' + (h.numero_rif || '') + ' ' + (h.raccolta || '')).toLowerCase().includes(kw));
+
+  const box = $('#hd-list');
+  const count = (fonte || kw) ? `<div class="qs-count">${list.length} hadith</div>` : '';
+  box.innerHTML = count + (list.length
+    ? `<div class="grid">${list.map(hCard).join('')}</div>`
+    : `<div class="empty">Nessun hadith trovato tra quelli inseriti.</div>`);
+}
+function hadithClear() { $('#hs-fonte').value = ''; $('#hs-kw').value = ''; hadithSearch(); }
+
+/* ============================================================
+   SCHEDE DI STUDIO GENERICHE — Azioni, Segni dell'Ora,
+   Creazione, Luoghi. Stessa forma: { titolo, arabo, categoria,
+   descrizione, fonte }. Un solo motore: ricerca + griglia + dettaglio.
+   La chiave della pagina è anche il nome della tabella nello store.
+   ============================================================ */
+const STUDIO_PAGES = {
+  azioni:    { eye: 'Azioni · الأعمال',              title: 'Le azioni',        sub: 'Opere e loro peso: ciò che avvicina e ciò che allontana.',
+               cats: { buona: 'Buone azioni', culto: 'Atti di culto', peccato: 'Peccati' } },
+  segni_ora: { eye: "Segni dell'Ora · علامات الساعة", title: "I segni dell'Ora", sub: 'I segni minori e maggiori che precedono l’Ultimo Giorno.',
+               cats: { minore: 'Segni minori', maggiore: 'Segni maggiori' } },
+  creazione: { eye: 'La creazione · الخلق',          title: 'La creazione',     sub: 'Il cosmo, gli esseri e gli ordini del creato.' },
+  luoghi:    { eye: 'Luoghi · الأماكن',              title: 'I luoghi',         sub: 'Luoghi sacri e dell’aldilà, con il loro significato.',
+               cats: { sacro: 'Luoghi sacri', aldila: "Aldilà" } },
+};
+const catLabel = (cfg, k) => (cfg.cats && cfg.cats[k]) || k;
+
+function gCard(key, x) {
+  const cfg = STUDIO_PAGES[key];
+  const badge = x.categoria ? esc(catLabel(cfg, x.categoria)) : esc(cfg.title);
+  return `<div class="card" onclick="openStudioDetail('${key}',${x.id})">
+    <span class="k">${badge}</span>
+    <h3>${esc(x.titolo)}</h3>
+    ${x.arabo ? `<div class="arh">${esc(x.arabo)}</div>` : ''}
+    <p>${esc(x.descrizione || '')}</p></div>`;
+}
+
+function renderStudio(key) {
+  const cfg = STUDIO_PAGES[key];
+  const hasCats = cfg.cats && Object.keys(cfg.cats).length;
+  let html = head(cfg.eye, cfg.title, cfg.sub);
+  html += `<div class="quran-search"><div class="qs-grid ${hasCats ? 'qs-grid-2' : 'qs-grid-1'}">`;
+  if (hasCats) {
+    const opts = '<option value="">Tutte le categorie</option>' +
+      Object.entries(cfg.cats).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+    html += `<div class="qs-field"><label>Categoria</label>
+      <select id="st-cat-${key}" onchange="studioSearch('${key}')">${opts}</select></div>`;
+  }
+  html += `<div class="qs-field qs-kw"><label>Parole chiave</label>
+      <input id="st-kw-${key}" placeholder="Titolo, testo, fonte…" oninput="studioSearch('${key}')"></div>
+      <button class="qs-clear" onclick="studioClear('${key}')" title="Azzera">✕</button>
+    </div></div>
+  <div id="st-list-${key}"></div>`;
+  $('#p-' + key).innerHTML = html;
+  studioSearch(key);
+}
+function studioSearch(key) {
+  const catEl = $('#st-cat-' + key);
+  const cat = catEl ? catEl.value : '';
+  const kw = ($('#st-kw-' + key).value || '').trim().toLowerCase();
+  let list = store.list(key);
+  if (cat) list = list.filter(x => x.categoria === cat);
+  if (kw)  list = list.filter(x => ((x.titolo || '') + ' ' + (x.arabo || '') + ' ' + (x.descrizione || '') + ' ' + (x.fonte || '')).toLowerCase().includes(kw));
+  const box = $('#st-list-' + key);
+  const count = (cat || kw) ? `<div class="qs-count">${list.length} voci</div>` : '';
+  box.innerHTML = count + (list.length
+    ? `<div class="grid">${list.map(x => gCard(key, x)).join('')}</div>`
+    : `<div class="empty">Nessuna voce trovata.</div>`);
+}
+function studioClear(key) {
+  const catEl = $('#st-cat-' + key); if (catEl) catEl.value = '';
+  $('#st-kw-' + key).value = '';
+  studioSearch(key);
+}
+function openStudioDetail(key, id) {
+  const cfg = STUDIO_PAGES[key];
+  const x = store.get(key, id);
+  const catL = x.categoria ? ' · ' + esc(catLabel(cfg, x.categoria)) : '';
+  let h = `<div class="reader"><div class="back" onclick="nav('${key}')">← Torna</div>`;
+  h += `<div class="eye">${esc(cfg.eye)}${catL}</div><h1 class="t">${esc(x.titolo)}</h1>`;
+  if (x.arabo)      h += `<div class="ayah" style="font-size:24px;padding:16px 22px">${esc(x.arabo)}</div>`;
+  if (x.descrizione) h += `<div class="body" style="margin-top:12px">${esc(x.descrizione)}</div>`;
+  if (x.fonte)      h += `<div class="src">📚 ${esc(x.fonte)}</div>`;
+  h += '</div>'; $('#p-detail').innerHTML = h; show('detail');
+}
+
+/* ============================================================
+   ALLAH — Asmāʾ al-Ḥusnā (i 99 Nomi più belli)
+   ============================================================ */
+function renderAllah() {
+  let html = `<div class="allah-hero">
+    <div class="ah-name">اللّٰه</div>
+    <div class="ah-sub">Asmāʾ al-Ḥusnā · الأسماء الحسنى</div>
+    <p class="ah-q">«Ad Allah appartengono i nomi più belli: invocateLo con essi.»<span>al-Aʿrāf · 7:180</span></p>
+  </div>`;
+  html += `<div class="quran-search"><div class="qs-grid qs-grid-1">
+      <div class="qs-field qs-kw"><label>Cerca un Nome</label>
+        <input id="as-kw" placeholder="Nome, traslitterazione o significato…" oninput="asmaSearch()"></div>
+      <button class="qs-clear" onclick="asmaClear()" title="Azzera">✕</button>
+    </div></div>
+  <div id="asma-list"></div>`;
+  $('#p-allah').innerHTML = html;
+  asmaSearch();
+}
+function asmaCard(x) {
+  return `<div class="asma-card" onclick="openAsmaDetail(${x.id})">
+    <div class="as-num">${x.numero}</div>
+    <div class="as-ar">${esc(x.arabo)}</div>
+    <div class="as-tr">${esc(x.translit)}</div>
+    <div class="as-me">${esc(x.significato)}</div></div>`;
+}
+function asmaSearch() {
+  const kw = ($('#as-kw').value || '').trim().toLowerCase();
+  let list = store.list('asma');
+  if (kw) list = list.filter(x => (x.arabo + ' ' + x.translit + ' ' + x.significato + ' ' + x.numero).toLowerCase().includes(kw));
+  const box = $('#asma-list');
+  const count = kw ? `<div class="qs-count">${list.length} nomi</div>` : '';
+  const note = `<div class="mz-page-head" style="margin-top:20px">I Nomi più belli
+    <span class="mz-note">bozza — 14 dei 99; i restanti in arrivo</span></div>`;
+  box.innerHTML = (kw ? count : note) + (list.length
+    ? `<div class="asma-grid">${list.map(asmaCard).join('')}</div>`
+    : `<div class="empty">Nessun Nome trovato.</div>`);
+}
+function asmaClear() { $('#as-kw').value = ''; asmaSearch(); }
+function openAsmaDetail(id) {
+  const x = store.get('asma', id);
+  const pens = store.list('pensieri').filter(p => p.anchor_tipo === 'asma' && p.anchor_id === id);
+  let h = `<div class="reader"><div class="back" onclick="nav('allah')">← Torna</div>`;
+  h += `<div class="eye">Asmāʾ al-Ḥusnā · Nome ${x.numero}</div>
+    <div class="ayah" style="font-size:40px;text-align:center;padding:26px">${esc(x.arabo)}</div>
+    <h1 class="t" style="text-align:center">${esc(x.translit)}</h1>
+    <div class="trans">${esc(x.significato)}</div>
+    <h2>Pensieri nati qui</h2>${pens.map(p => `<div class="note-b"><div class="l">pensiero</div><div class="body" style="margin:0">${esc(p.testo)}</div></div>`).join('') || '<div class="empty" style="padding:14px">Nessuno ancora.</div>'}`;
+  h += '</div>'; $('#p-detail').innerHTML = h; show('detail');
+}
+
+/* ============================================================
+   IMPOSTAZIONI — tutto salva subito (niente pulsante Salva).
+   app.js legge/scrive solo store.getSettings()/setSettings().
+   ============================================================ */
+const TZ_LIST = ['UTC', 'Africa/Casablanca', 'Europe/Rome', 'Europe/London', 'Europe/Paris', 'Asia/Istanbul', 'Asia/Riyadh', 'Asia/Dubai', 'America/New_York'];
+const tzLabel = tz => tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' ');
+/* sezioni della sidebar che si possono nascondere (tutte tranne Oggi e Impostazioni) */
+const TOGGLE_SEZIONI = [
+  ['lettura', 'Lettura'], ['memorizzazione', 'Memorizzazione'], ['pensieri', 'Pensieri'],
+  ['allah', 'Allah'], ['quran', 'Corano'], ['hadith', 'Hadith'], ['people', 'Personaggi'],
+  ['stories', 'Storie'], ['themes', 'Temi'], ['fiqh', 'Fiqh'],
+  ['azioni', 'Azioni'], ['segni_ora', "Segni dell'Ora"], ['creazione', 'Creazione'], ['luoghi', 'Luoghi'],
+];
+
+/* nasconde/mostra le voci di menu secondo le impostazioni */
+function applySezioni() {
+  const sez = store.getSettings().vista.sezioni;
+  TOGGLE_SEZIONI.forEach(([k]) => {
+    const el = document.querySelector(`.lnk[data-p="${k}"]`);
+    if (el) el.style.display = sez[k] === false ? 'none' : '';
+  });
+}
+/* rigenera Oggi (widget + momenti) dopo un cambio impostazioni */
+function refreshOggi() { renderOggi(); }
+
+const chipTog = (on, label, onclick) => `<span class="chip ${on ? 'sel' : ''}" onclick="${onclick}">${on ? '✓ ' : ''}${esc(label)}</span>`;
+const stepper = (val, dec, inc, suffix) => `<span class="stepper"><button onclick="${dec}">−</button><span class="v">${val >= 0 && suffix === 'min' ? '+' : ''}${val}${suffix === 'min' ? '′' : ''}</span><button onclick="${inc}">+</button></span>`;
+
+function renderImpostazioni() {
+  const S = store.getSettings();
+  let html = head('Impostazioni · الإعدادات', 'Impostazioni', 'Ogni modifica si salva da sola.');
+
+  /* ---- 1 · TEMPO ---- */
+  const tzOpts = TZ_LIST.map(tz => `<option value="${tz}" ${S.tempo.fuso === tz ? 'selected' : ''}>${esc(tzLabel(tz))}</option>`).join('');
+  html += `<div class="hd">🕐 Tempo</div><div class="card set-card">
+    <div class="f"><label>Ora principale (fuso)</label>
+      <select onchange="setFuso(this.value)">${tzOpts}</select></div>
+    <div class="f"><label>Fusi affiancati</label>
+      <div class="chips">${TZ_LIST.filter(tz => tz !== S.tempo.fuso).map(tz => chipTog(S.tempo.fusi_extra.includes(tz), tzLabel(tz), `toggleFusoExtra('${tz}')`)).join('')}</div></div>
+    <div class="f"><label>Formato ora</label>
+      <div class="chips">${chipTog(S.tempo.formato === '24h', '24 ore', "setFormato('24h')")}${chipTog(S.tempo.formato === '12h', '12 ore', "setFormato('12h')")}</div></div>
+    <div class="f"><label>Calendario hijri</label>
+      <div class="set-row">${chipTog(S.tempo.hijri_mostra, 'Mostra la data hijri', 'toggleHijri()')}
+        <span class="set-lbl" style="margin:0">correzione</span>
+        ${stepper(S.tempo.hijri_offset, 'setHijriOffset(-1)', 'setHijriOffset(1)', 'gg')} <span class="set-lbl" style="margin:0">giorni</span></div></div>
+  </div>`;
+
+  /* ---- 2 · PREGHIERE ---- */
+  const attivo = S.preghiere.luoghi.find(l => l.id === S.preghiere.luogo_attivo);
+  html += `<div class="hd">🕌 Preghiere</div><div class="card set-card">
+    <div class="set-lbl">Luoghi salvati</div>
+    ${S.preghiere.luoghi.map(l => `<div class="set-place ${l.id === S.preghiere.luogo_attivo ? 'on' : ''}">
+      <span class="pname" onclick="setLuogoAttivo(${l.id})">${l.id === S.preghiere.luogo_attivo ? '● ' : '○ '}${esc(l.nome)} <span class="set-lbl" style="margin:0;display:inline">${esc(tzLabel(l.tz))}</span></span>
+      <button class="rm" onclick="delLuogo(${l.id})" title="Elimina">✕</button></div>`).join('')}
+    <div class="set-add">
+      <input id="lg-nome" placeholder="Nome luogo">
+      <input id="lg-lat" type="number" step="0.0001" placeholder="lat">
+      <input id="lg-lon" type="number" step="0.0001" placeholder="lon">
+      <select id="lg-tz">${TZ_LIST.map(tz => `<option value="${tz}">${esc(tzLabel(tz))}</option>`).join('')}</select>
+      <button class="add" onclick="addLuogo()">Aggiungi</button></div>
+
+    <div class="set-lbl">Cambio luogo</div>
+    <div class="chips">${chipTog(S.preghiere.cambio === 'manuale', 'Manuale', "setCambio('manuale')")}${chipTog(S.preghiere.cambio === 'auto', 'Automatico (posizione)', "setCambio('auto')")}</div>
+
+    <div class="set-info">Origine orari: <b>calcolo di riserva</b> · orari d'esempio. Con Supabase arriverà il calendario caricato${attivo ? ' per ' + esc(attivo.nome) : ''}, con il mese di validità.</div>
+
+    <div class="set-lbl">Correzione per preghiera (minuti)</div>
+    ${store.preghiere.map(pr => `<div class="set-row"><span style="min-width:78px">${esc(pr.t)}</span>${stepper(S.preghiere.correzioni[pr.k] || 0, `setCorrezione('${pr.k}',-1)`, `setCorrezione('${pr.k}',1)`, 'min')}</div>`).join('')}
+
+    <div class="set-lbl">Mostra sull'arco solare</div>
+    <div class="chips">${store.preghiere.map(pr => chipTog(S.preghiere.mostra[pr.k], pr.t, `togglePreghiera('${pr.k}')`)).join('')}</div>
+  </div>`;
+
+  /* ---- 3 · VISUALIZZAZIONE ---- */
+  html += `<div class="hd">👁 Visualizzazione</div><div class="card set-card">
+    <div class="set-lbl">Widget in Oggi</div>
+    <div class="chips">
+      ${chipTog(S.vista.widget.arco, 'Arco solare', "toggleWidget('arco')")}
+      ${chipTog(S.vista.widget.marea, 'Marea', "toggleWidget('marea')")}
+      ${chipTog(S.vista.widget.luna, 'Luna', "toggleWidget('luna')")}</div>
+
+    <div class="set-lbl">Sezioni nel menu</div>
+    <div class="chips">${TOGGLE_SEZIONI.map(([k, lab]) => chipTog(S.vista.sezioni[k] !== false, lab, `toggleSezione('${k}')`)).join('')}</div>
+
+    <div class="set-lbl">Momenti attivi in Oggi</div>
+    <div class="chips">${store.momenti.map(m => chipTog(S.vista.momenti[m.k] !== false, m.t, `toggleMomento('${m.k}')`)).join('')}</div>
+  </div>`;
+
+  /* ---- 4 · DATI ---- */
+  html += `<div class="hd">🗄 Dati</div><div class="card set-card">
+    <div class="set-row"><button class="btn2" onclick="exportJSON()">⬇ Esporta tutto (JSON)</button>
+      <button class="btn2" style="border-color:var(--terra);color:var(--terra)" onclick="if(confirm('Azzerare TUTTI i dati locali? L\\'operazione non è reversibile.')){store.reset()}">🗑 Azzera dati locali</button></div>
+    <div class="set-info">L'esportazione scarica un file con tutto (voci, pensieri, khatam, impostazioni): la tua rete di sicurezza prima della migrazione a Supabase.</div>
+  </div>`;
+
+  $('#p-impostazioni').innerHTML = html;
+}
+
+/* ---- Tempo ---- */
+function setFuso(tz) { store.setSettings({ tempo: { fuso: tz } }); renderImpostazioni(); refreshOggi(); }
+function toggleFusoExtra(tz) {
+  const arr = store.getSettings().tempo.fusi_extra.slice();
+  const i = arr.indexOf(tz); i >= 0 ? arr.splice(i, 1) : arr.push(tz);
+  store.setSettings({ tempo: { fusi_extra: arr } }); renderImpostazioni(); refreshOggi();
+}
+function setFormato(f) { store.setSettings({ tempo: { formato: f } }); renderImpostazioni(); refreshOggi(); }
+function toggleHijri() { store.setSettings({ tempo: { hijri_mostra: !store.getSettings().tempo.hijri_mostra } }); renderImpostazioni(); refreshOggi(); }
+function setHijriOffset(delta) {
+  let v = store.getSettings().tempo.hijri_offset + delta; v = Math.max(-2, Math.min(2, v));
+  store.setSettings({ tempo: { hijri_offset: v } }); renderImpostazioni(); refreshOggi();
+}
+/* ---- Preghiere ---- */
+function setCambio(mode) { store.setSettings({ preghiere: { cambio: mode } }); renderImpostazioni(); }
+function setLuogoAttivo(id) { store.setSettings({ preghiere: { luogo_attivo: id } }); renderImpostazioni(); refreshOggi(); }
+function addLuogo() {
+  const nome = val('lg-nome'); if (!nome) { toast('Serve il nome del luogo'); return; }
+  const arr = store.getSettings().preghiere.luoghi.slice();
+  const id = Math.max(0, ...arr.map(l => l.id)) + 1;
+  arr.push({ id, nome, lat: +val('lg-lat') || 0, lon: +val('lg-lon') || 0, tz: val('lg-tz') || 'UTC' });
+  store.setSettings({ preghiere: { luoghi: arr } }); renderImpostazioni(); toast('Luogo aggiunto');
+}
+function delLuogo(id) {
+  const S = store.getSettings();
+  const arr = S.preghiere.luoghi.filter(l => l.id !== id);
+  const patch = { preghiere: { luoghi: arr } };
+  if (S.preghiere.luogo_attivo === id) patch.preghiere.luogo_attivo = arr[0] ? arr[0].id : null;
+  store.setSettings(patch); renderImpostazioni(); refreshOggi();
+}
+function setCorrezione(k, delta) {
+  let v = (store.getSettings().preghiere.correzioni[k] || 0) + delta; v = Math.max(-30, Math.min(30, v));
+  store.setSettings({ preghiere: { correzioni: { [k]: v } } }); renderImpostazioni(); refreshOggi();
+}
+function togglePreghiera(k) { store.setSettings({ preghiere: { mostra: { [k]: !store.getSettings().preghiere.mostra[k] } } }); renderImpostazioni(); refreshOggi(); }
+/* ---- Visualizzazione ---- */
+function toggleWidget(k) { store.setSettings({ vista: { widget: { [k]: !store.getSettings().vista.widget[k] } } }); renderImpostazioni(); refreshOggi(); }
+function toggleSezione(k) { store.setSettings({ vista: { sezioni: { [k]: !(store.getSettings().vista.sezioni[k] !== false) } } }); renderImpostazioni(); applySezioni(); }
+function toggleMomento(k) { store.setSettings({ vista: { momenti: { [k]: !(store.getSettings().vista.momenti[k] !== false) } } }); renderImpostazioni(); refreshOggi(); }
+/* ---- Dati ---- */
+function exportJSON() {
+  const blob = new Blob([store.export()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'addukira-backup-' + store.today() + '.json';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+  toast('Backup scaricato');
+}
+
 function renderPage(p) {
   counts();
+  if (STUDIO_PAGES[p]) { renderStudio(p); return; }
+  if (p === 'impostazioni') renderImpostazioni();
+  if (p === 'allah') renderAllah();
   if (p === 'oggi') renderOggi();
   if (p === 'lettura') renderLettura();
   if (p === 'memorizzazione') renderMemorizzazione();
   if (p === 'pensieri') renderPensieri();
-  if (p === 'quran') $('#p-quran').innerHTML = head('Corano · القرآن', 'Sure e versetti', 'Le sure e i versetti annotati, collegabili a temi, personaggi e hadith.')
-    + `<div class="hd">Sure</div><div class="grid">${store.list('sure').map(s => `<div class="card"><span class="k">${s.numero} · ${s.translit}</span><div class="arh">${s.nome_arabo}</div><p>${esc(s.titolo_it)} · ${s.n_versetti} vv · ${s.rivelazione}</p></div>`).join('')}</div>`
-    + `<div class="hd">Versetti annotati</div><div class="grid">${store.list('versetti').map(vCard).join('')}</div>`;
-  if (p === 'hadith') $('#p-hadith').innerHTML = head('Hadith · الحديث', 'Raccolta di hadith', 'Testo, isnād, grado 🟢, narratore.') + `<div class="grid">${store.list('hadith').map(hCard).join('')}</div>`;
-  if (p === 'people') $('#p-people').innerHTML = head('Personaggi · الأعلام', 'Chi popola la storia', 'Profeti, ṣaḥāba, sapienti, angeli, jinn, figure-tipo.') + `<div class="grid">${store.list('personaggi').map(pCard).join('')}</div>`;
+  if (p === 'quran') renderQuran();
+  if (p === 'hadith') renderHadith();
+  if (p === 'people') renderPeople();
   if (p === 'stories') $('#p-stories').innerHTML = head('Storie · القصص', 'Racconti', 'I grandi racconti in scene con insegnamenti.') + `<div class="grid">${store.list('storie').map(sCard).join('')}</div>`;
   if (p === 'themes') $('#p-themes').innerHTML = head('Temi · المواضيع', 'Temi & concetti', 'I fili che raccolgono tutto ciò che vi appartiene.') + `<div class="grid">${store.list('temi').map(tCard).join('')}</div>`;
   if (p === 'fiqh') $('#p-fiqh').innerHTML = head('Fiqh · الفقه', 'Regole e scuole', 'Solo qui la giurisprudenza: la giornata resta pratica pura.') + `<div class="grid">${store.list('fiqh').map(fCard).join('')}</div>`;
@@ -452,8 +928,18 @@ function saveEntry() {
   const on = document.querySelector('.lnk.on'); renderPage(on ? on.dataset.p : 'oggi');
 }
 
+/* ---- lingua IT / AR ---- */
+document.querySelectorAll('[data-lang-btn]').forEach(b => {
+  b.onclick = () => {
+    store.setLang(b.getAttribute('data-lang-btn'));
+    applyI18n();
+    const on = document.querySelector('.lnk.on');
+    renderPage(on ? on.dataset.p : 'oggi');   /* ri-render pagina corrente nella nuova lingua */
+  };
+});
+
 /* ---- avvio ---- */
-renderPage('oggi'); counts();
+renderPage('oggi'); counts(); applyI18n(); applySezioni();
 
 /* PWA: registra il service worker se servita via http(s) */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

@@ -10,19 +10,22 @@ const Widgets = (() => {
 
   /* ---- CIELO: arco del sole + orari di preghiera (esempio) ---- */
   const P = [
-    { k: 'Fajr', t: 230, n: 1 }, { k: 'Shurūq', t: 340, sr: 1 },
-    { k: 'Ẓuhr', t: 800 }, { k: 'ʿAṣr', t: 1035 },
-    { k: 'Maghrib', t: 1255, ss: 1 }, { k: 'ʿIshāʾ', t: 1355, n: 1 },
+    { k: 'Fajr', key: 'fajr', t: 230, n: 1 }, { k: 'Shurūq', key: 'shuruq', t: 340, sr: 1 },
+    { k: 'Ẓuhr', key: 'zuhr', t: 800 }, { k: 'ʿAṣr', key: 'asr', t: 1035 },
+    { k: 'Maghrib', key: 'maghrib', t: 1255, ss: 1 }, { k: 'ʿIshāʾ', key: 'isha', t: 1355, n: 1 },
   ];
   const SR = 340, SS = 1255, CX = 200, CY = 112, R = 88;
   const pos = t => { const f = Math.min(1, Math.max(0, (t - SR) / (SS - SR))), a = Math.PI * (1 - f); return { x: CX + R * Math.cos(a), y: CY - R * Math.sin(a) }; };
 
   function drawArc() {
-    const d = new Date(), m = d.getHours() * 60 + d.getMinutes(), day = m >= SR && m <= SS;
+    const S = store.getSettings(), T = S.tempo, PR = S.preghiere;
+    const m = store.nowMin(T.fuso), day = m >= SR && m <= SS;
+    /* preghiere visibili, con correzione in minuti applicata */
+    const vis = P.filter(pr => PR.mostra[pr.key]).map(pr => ({ ...pr, t: pr.t + (PR.correzioni[pr.key] || 0) }));
     let s = `<path d="M${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}" fill="none" stroke="rgba(246,241,228,.16)" stroke-width="1.5"/>`;
     if (day) { const p = pos(m); s += `<path d="M${CX - R} ${CY} A ${R} ${R} 0 0 1 ${p.x} ${p.y}" fill="none" stroke="#b08d46" stroke-width="2"/>`; }
     s += `<line x1="14" y1="${CY}" x2="386" y2="${CY}" stroke="rgba(246,241,228,.28)"/>`;
-    P.forEach(pr => {
+    vis.forEach(pr => {
       if (pr.n) {
         const x = pr.t < SR ? 58 : 344;
         s += `<circle cx="${x}" cy="${CY + 15}" r="3.2" fill="none" stroke="#d3b573" stroke-width="1.3"/><text x="${x}" y="${CY + 32}" text-anchor="middle" fill="rgba(246,241,228,.7)" font-size="10" font-family="Inter">${pr.k}</text>`;
@@ -34,11 +37,15 @@ const Widgets = (() => {
     });
     if (day) { const p = pos(m); s += `<circle cx="${p.x}" cy="${p.y}" r="12" fill="#d3b573" opacity=".18"/><circle cx="${p.x}" cy="${p.y}" r="6.5" fill="#e8c87e"/>`; }
     $id('w-arc').innerHTML = s;
-    $id('w-now').textContent = hhmm(m);
-    const past = [...P].filter(p => p.t <= m).pop();
-    $id('w-state').textContent = past ? past.k + ' passato' : 'prima di Fajr';
-    const nx = P.find(p => p.t > m) || P[0]; let df = nx.t - m; if (df < 0) df += 1440;
-    $id('w-next').textContent = `▸ prossima: ${nx.k} tra ${Math.floor(df / 60)}h ${df % 60}m`;
+    $id('w-now').textContent = store.fmtHM(m);
+    const past = [...vis].filter(p => p.t <= m).pop();
+    $id('w-state').textContent = past ? past.k + ' passato' : (vis.length ? 'prima di ' + vis[0].k : '—');
+    if (vis.length) { const nx = vis.find(p => p.t > m) || vis[0]; let df = nx.t - m; if (df < 0) df += 1440; $id('w-next').textContent = `▸ prossima: ${nx.k} tra ${Math.floor(df / 60)}h ${df % 60}m`; }
+    else $id('w-next').textContent = '—';
+    /* orologi affiancati (fusi extra) */
+    $id('w-clocks').innerHTML = T.fusi_extra
+      .map(tz => `<span class="tzc">${tz.split('/').pop().replace('_', ' ')} ${store.fmtHM(store.nowMin(tz))}</span>`)
+      .join('');
   }
 
   /* ---- MAREA (dati d'esempio) ---- */
@@ -90,20 +97,21 @@ const Widgets = (() => {
 
   function markup() {
     return `<div class="stack">
-      <div class="sky">
+      <div class="sky" id="w-sky">
         <div class="sky-top"><div class="now" id="w-now">—</div><div class="state" id="w-state">—</div></div>
+        <div class="sky-clocks" id="w-clocks"></div>
         <svg viewBox="0 0 400 150" id="w-arc" aria-label="Arco del giorno e orari di preghiera"></svg>
         <div class="sky-foot" id="w-next">—</div>
       </div>
       <div class="duo">
-        <div class="card">
+        <div class="card" id="w-tide-card">
           <div class="k"><span>Marea</span><span class="loc" id="w-loc">📍 la tua posizione</span></div>
           <div class="big" id="w-tide-time">—</div>
           <div class="lab" id="w-tide-lab">—</div>
           <svg viewBox="0 0 200 44" class="tide-wave" id="w-wave"></svg>
           <div class="tide-next"><span id="w-t-now">—</span><span id="w-t-then">—</span></div>
         </div>
-        <div class="card">
+        <div class="card" id="w-moon-card">
           <div class="k"><span>Luna</span><span class="loc" id="w-ill">—</span></div>
           <div class="moon-wrap">
             <svg width="74" height="74" viewBox="-42 -42 84 84" id="w-moon"></svg>
@@ -121,6 +129,8 @@ const Widgets = (() => {
     draw();
     if (!started) { started = true; setInterval(draw, 60000); }
   }
+  /* ridisegna su richiesta (dopo un cambio impostazioni), solo se montato */
+  const refresh = () => { if (document.getElementById('w-arc')) draw(); };
 
-  return { markup, mount };
+  return { markup, mount, refresh };
 })();

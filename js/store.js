@@ -1,5 +1,5 @@
 /* ============================================================
-   STORE — strato dati di Al-Maktaba.
+   STORE — strato dati di Addukira.
    v1: cache in memoria + persistenza localStorage.
    Passo 2 (Supabase): stesse funzioni pubbliche; init() caricherà
    da Supabase e _persist() scriverà lì. app.js NON cambia.
@@ -11,6 +11,16 @@ const MOMENTI = [
   { k: 'lettura',       t: 'Lettura',          ico: '📖' },
   { k: 'sera',          t: 'Sera',             ico: '🌆' },
   { k: 'prima_dormire', t: 'Prima di dormire', ico: '🌙' },
+];
+
+/* le cinque preghiere + i due momenti solari (chiavi ascii per le impostazioni) */
+const PREGHIERE = [
+  { k: 'fajr',    t: 'Fajr' },
+  { k: 'shuruq',  t: 'Shurūq' },
+  { k: 'zuhr',    t: 'Ẓuhr' },
+  { k: 'asr',     t: 'ʿAṣr' },
+  { k: 'maghrib', t: 'Maghrib' },
+  { k: 'isha',    t: "ʿIshāʾ" },
 ];
 
 /* numero di versetti per ognuna delle 114 sure (indice 0 = sura 1).
@@ -32,8 +42,14 @@ const SEED = {
     { id: 3, sura_id: 3, numero: 21, arabo: 'وَاللَّهُ غَالِبٌ عَلَىٰ أَمْرِهِ وَلَٰكِنَّ أَكْثَرَ النَّاسِ لَا يَعْلَمُونَ', traduzione: 'Allah prevale nel Suo disegno, ma la maggior parte degli uomini non lo sa.', contesto: '', nota: '' },
   ],
   personaggi: [
+    { id: 3, nome: 'Muḥammad ﷺ', nome_arabo: 'محمد ﷺ', categoria: 'muhammad', biografia: "Il Sigillo dei Profeti (khātam an-nabiyyīn), inviato come misericordia per i mondi. Alla Mecca ricevette la rivelazione del Corano tramite l'angelo Jibrīl.", fonte: 'Sīra — Ibn Hishām' },
     { id: 1, nome: 'Yusuf', nome_arabo: 'يوسف', categoria: 'profeta', biografia: 'La storia più bella: sogno, tradimento, prigione, perdono.', fonte: 'Ibn Kathir' },
     { id: 2, nome: 'ʿUmar ibn al-Khaṭṭāb', nome_arabo: 'عمر بن الخطاب', categoria: 'sahaba', biografia: 'Secondo califfo.', fonte: '' },
+    { id: 4, nome: 'Jibrīl', nome_arabo: 'جبريل', categoria: 'angelo', biografia: "L'angelo della rivelazione, che portò il Corano al Profeta ﷺ.", fonte: '' },
+    { id: 5, nome: 'Iblīs', nome_arabo: 'إبليس', categoria: 'jinn', biografia: "Dai jinn; per orgoglio rifiutò di prosternarsi ad Ādam.", fonte: 'Corano · al-Baqara' },
+    { id: 6, nome: 'Abū Lahab', nome_arabo: 'أبو لهب', categoria: 'nemico', biografia: "Zio del Profeta ﷺ e suo oppositore; menzionato nella sura che porta il suo nome.", fonte: 'Corano · al-Masad' },
+    { id: 7, nome: 'Khadīja bint Khuwaylid', nome_arabo: 'خديجة بنت خويلد', categoria: 'madre_credenti', biografia: "Prima moglie del Profeta ﷺ e prima credente; lo sostenne agli inizi della rivelazione.", fonte: '' },
+    { id: 8, nome: 'ʿĀʾisha bint Abī Bakr', nome_arabo: 'عائشة بنت أبي بكر', categoria: 'madre_credenti', biografia: 'Moglie del Profeta ﷺ, tra le maggiori trasmettitrici di hadith.', fonte: '' },
   ],
   hadith: [
     { id: 1, testo: 'Chi recita Āyat al-Kursī dopo ogni preghiera prescritta, nulla lo separa dal Paradiso se non la morte.', raccolta: "Nasa'i", numero_rif: "Nasa'i · al-Kubra", grado: 'sahih', narratore_id: null, isnad: '', nota: 'Fondamento della recita dopo-ṣalāt.' },
@@ -52,9 +68,70 @@ const SEED = {
     { id: 1, titolo: 'Le 4 scuole · Madhab', categoria: 'madhab', contenuto: 'Hanafi, Maliki, Shafiʿi, Hanbali.', fonti: '' },
     { id: 2, titolo: 'La ṣalāt: condizioni e orari', categoria: 'salat', contenuto: 'Regole di validità della preghiera.', fonti: 'Bukhari · Muslim' },
   ],
+  /* ---- Allah · Asmāʾ al-Ḥusnā (bozza: primi 14 dei 99 Nomi) ---- */
+  asma: [
+    { id: 1,  numero: 1,  arabo: 'الرَّحْمَٰن',  translit: 'Ar-Raḥmān',   significato: 'Il Compassionevole' },
+    { id: 2,  numero: 2,  arabo: 'الرَّحِيم',    translit: 'Ar-Raḥīm',    significato: 'Il Misericordioso' },
+    { id: 3,  numero: 3,  arabo: 'الْمَلِك',     translit: 'Al-Malik',    significato: 'Il Re, il Sovrano' },
+    { id: 4,  numero: 4,  arabo: 'الْقُدُّوس',   translit: 'Al-Quddūs',   significato: 'Il Santo, il Purissimo' },
+    { id: 5,  numero: 5,  arabo: 'السَّلَام',    translit: 'As-Salām',    significato: 'La Pace, la Fonte della pace' },
+    { id: 6,  numero: 6,  arabo: 'الْمُؤْمِن',   translit: "Al-Muʾmin",   significato: 'Il Custode della fede' },
+    { id: 7,  numero: 7,  arabo: 'الْمُهَيْمِن', translit: 'Al-Muhaymin', significato: 'Il Vigilante, il Garante' },
+    { id: 8,  numero: 8,  arabo: 'الْعَزِيز',    translit: 'Al-ʿAzīz',    significato: 'Il Potente' },
+    { id: 9,  numero: 9,  arabo: 'الْجَبَّار',   translit: 'Al-Jabbār',   significato: 'Il Possente, che tutto ripara' },
+    { id: 10, numero: 10, arabo: 'الْمُتَكَبِّر', translit: 'Al-Mutakabbir', significato: 'Il Supremo in grandezza' },
+    { id: 11, numero: 11, arabo: 'الْخَالِق',    translit: 'Al-Khāliq',   significato: 'Il Creatore' },
+    { id: 12, numero: 12, arabo: 'الْبَارِئ',    translit: "Al-Bāriʾ",    significato: "L'Ordinatore del creato" },
+    { id: 13, numero: 13, arabo: 'الْمُصَوِّر',  translit: 'Al-Muṣawwir', significato: 'Il Formatore delle immagini' },
+    { id: 14, numero: 14, arabo: 'الْغَفَّار',   translit: 'Al-Ghaffār',  significato: 'Il Perdonatore incessante' },
+  ],
+  /* ---- nuove schede di studio (bozze) ---- */
+  azioni: [
+    { id: 1, titolo: 'Ṣadaqa · Elemosina', arabo: 'الصدقة', categoria: 'buona', descrizione: "Dare in beneficenza spegne il peccato come l'acqua spegne il fuoco.", fonte: 'Tirmidhī' },
+    { id: 2, titolo: 'Birr al-wālidayn · Pietà verso i genitori', arabo: 'بر الوالدين', categoria: 'buona', descrizione: 'Tra le opere più amate ad Allah, dopo la preghiera nel suo tempo.', fonte: 'Bukhari' },
+    { id: 3, titolo: 'Ghība · Maldicenza', arabo: 'الغيبة', categoria: 'peccato', descrizione: 'Parlare del fratello con ciò che gli dispiace, anche se vero.', fonte: 'Muslim' },
+  ],
+  segni_ora: [
+    { id: 1, titolo: "Diffusione dell'ignoranza religiosa", arabo: 'قبض العلم', categoria: 'minore', descrizione: "Il sapere viene tolto con la morte dei sapienti; si diffonde l'ignoranza.", fonte: 'Bukhari' },
+    { id: 2, titolo: 'Il Dajjāl', arabo: 'الدجال', categoria: 'maggiore', descrizione: 'Il grande impostore, prova suprema per i credenti prima della fine.', fonte: 'Muslim' },
+    { id: 3, titolo: 'Il ritorno di ʿĪsā', arabo: 'نزول عيسى', categoria: 'maggiore', descrizione: 'La discesa di Gesù, figlio di Maria, che spezzerà la croce e ucciderà il Dajjāl.', fonte: 'Muslim' },
+  ],
+  creazione: [
+    { id: 1, titolo: 'La creazione di Ādam', arabo: 'خلق آدم', categoria: '', descrizione: 'Allah creò Ādam dalla terra e insufflò in lui il Suo spirito; gli angeli si prosternarono.', fonte: 'Corano · al-Ḥijr' },
+    { id: 2, titolo: 'Il Trono · al-ʿArsh', arabo: 'العرش', categoria: '', descrizione: 'Il più grande della creazione, sopra i sette cieli, portato dagli angeli.', fonte: 'Corano · Ghāfir' },
+    { id: 3, titolo: 'I sette cieli', arabo: 'السماوات السبع', categoria: '', descrizione: 'Sette cieli sovrapposti, senza incrinature nella creazione del Misericordioso.', fonte: 'Corano · al-Mulk' },
+  ],
+  luoghi: [
+    { id: 1, titolo: 'La Mecca · Makka', arabo: 'مكة', categoria: 'sacro', descrizione: 'La città della Kaʿba, direzione della preghiera e meta del pellegrinaggio.', fonte: '' },
+    { id: 2, titolo: 'Medina · al-Madīna', arabo: 'المدينة', categoria: 'sacro', descrizione: 'La città del Profeta ﷺ, dove sorge la sua moschea.', fonte: '' },
+    { id: 3, titolo: 'al-Masjid al-Aqṣā', arabo: 'المسجد الأقصى', categoria: 'sacro', descrizione: 'La moschea benedetta, prima qibla e tappa del viaggio notturno.', fonte: 'Corano · al-Isrāʾ' },
+    { id: 4, titolo: 'Il Paradiso · al-Janna', arabo: 'الجنة', categoria: 'aldila', descrizione: 'La dimora eterna dei credenti, ciò che nessun occhio ha mai visto.', fonte: 'Bukhari' },
+  ],
   pensieri: [
     { id: 1, testo: '"Allah prevale nel Suo disegno" — anche venduto per poche dracme, il piano di Yusuf sta andando dove deve. La sconfitta apparente è il trasporto.', anchor_tipo: 'versetto', anchor_id: 3, data: 'esempio' },
   ],
+  /* ---- impostazioni utente (default sensati) ---- */
+  impostazioni: {
+    tempo: {
+      fuso: 'Africa/Casablanca',        /* ora principale */
+      fusi_extra: ['Europe/Rome'],      /* orologi affiancati piccoli */
+      formato: '24h',                   /* '24h' | '12h' */
+      hijri_mostra: true,
+      hijri_offset: 0,                  /* -2..+2 giorni */
+    },
+    preghiere: {
+      luoghi: [{ id: 1, nome: 'Casablanca', lat: 33.5731, lon: -7.5898, tz: 'Africa/Casablanca' }],
+      luogo_attivo: 1,
+      cambio: 'manuale',                /* 'manuale' | 'auto' */
+      correzioni: { fajr: 0, shuruq: 0, zuhr: 0, asr: 0, maghrib: 0, isha: 0 },  /* minuti ± */
+      mostra: { fajr: true, shuruq: true, zuhr: true, asr: true, maghrib: true, isha: true },
+    },
+    vista: {
+      widget: { arco: true, marea: true, luna: true },
+      sezioni: { lettura: true, memorizzazione: true, pensieri: true, allah: true, quran: true, hadith: true, people: true, stories: true, themes: true, fiqh: true, azioni: true, segni_ora: true, creazione: true, luoghi: true },
+      momenti: { risveglio: true, dopo_salat: true, lettura: true, sera: true, prima_dormire: true },
+    },
+  },
   adhkar: [
     { id: 1, nome: 'Lode del risveglio', arabo: 'اَلْحَمْدُ لِلَّهِ الَّذي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا وَإِلَيْهِ النُّشُورُ', traduzione: 'Lode ad Allah che ci ha ridato la vita dopo la morte…', momento: 'risveglio', rip: '', versetto_id: null, hadith_id: null },
     { id: 2, nome: 'Miswak', arabo: '', traduzione: '', momento: 'risveglio', rip: '', versetto_id: null, hadith_id: null },
@@ -87,11 +164,49 @@ const SEED = {
   ],
 };
 
-const LS_KEY = 'al-maktaba-v2';
+const LS_KEY = 'addukira-v1';
+const LANG_KEY = 'addukira-lang';   /* preferenza lingua UI, indipendente dai dati */
 
 const store = (() => {
   let DB;
   let seq = 1000;
+  let LANG = 'it';
+  try { LANG = localStorage.getItem(LANG_KEY) || 'it'; } catch (e) { /* storage non disponibile */ }
+
+  /* merge profondo (patch → target): sovrascrive foglie e array, ricorre sugli oggetti */
+  function deepMerge(target, patch) {
+    for (const k in patch) {
+      const v = patch[k];
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        if (!target[k] || typeof target[k] !== 'object') target[k] = {};
+        deepMerge(target[k], v);
+      } else target[k] = v;
+    }
+    return target;
+  }
+  /* "HH:MM" → minuti dopo mezzanotte */
+  const hm2min = s => { const [h, m] = String(s).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+  /* anno-mese ("2026-07") e giorno ("7") della data nel fuso indicato */
+  function dateInTz(d, tz) {
+    try {
+      const p = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+      const g = t => p.find(x => x.type === t).value;
+      return { ym: g('year') + '-' + g('month'), day: String(+g('day')) };
+    } catch (e) {
+      return { ym: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'), day: String(d.getDate()) };
+    }
+  }
+
+  /* riempie SOLO le chiavi mancanti (per aggiungere default nuovi senza toccare le scelte utente) */
+  function fillDefaults(target, def) {
+    for (const k in def) {
+      const d = def[k];
+      if (d && typeof d === 'object' && !Array.isArray(d)) {
+        if (!target[k] || typeof target[k] !== 'object') target[k] = {};
+        fillDefaults(target[k], d);
+      } else if (target[k] === undefined) target[k] = structuredClone(d);
+    }
+  }
 
   /* ---- caricamento: localStorage se esiste, altrimenti seme ---- */
   function init() {
@@ -112,6 +227,8 @@ const store = (() => {
     delete DB.lettura;
     /* backfill di chiavi nuove eventualmente mancanti */
     for (const k in SEED) if (DB[k] === undefined) DB[k] = structuredClone(SEED[k]);
+    /* impostazioni: aggiungi eventuali default nuovi senza cancellare le scelte esistenti */
+    fillDefaults(DB.impostazioni, SEED.impostazioni);
 
     seq = Math.max(1000, ...Object.values(DB)
       .filter(Array.isArray).flat()
@@ -128,6 +245,33 @@ const store = (() => {
   return {
     init,
     momenti: MOMENTI,
+
+    /* ---- lingua UI (it | ar) ---- */
+    getLang: () => LANG,
+    setLang(l) { LANG = (l === 'ar') ? 'ar' : 'it'; try { localStorage.setItem(LANG_KEY, LANG); } catch (e) {} },
+
+    /* ---- impostazioni ---- */
+    preghiere: PREGHIERE,
+    getSettings: () => DB.impostazioni,
+    setSettings(patch) { deepMerge(DB.impostazioni, patch); _persist(); },
+    /* minuti dopo mezzanotte, ORA, nel fuso indicato (default: fuso principale) */
+    nowMin(tz) {
+      tz = tz || DB.impostazioni.tempo.fuso;
+      try {
+        const p = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+        return (+p.find(x => x.type === 'hour').value) * 60 + (+p.find(x => x.type === 'minute').value);
+      } catch (e) { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+    },
+    /* formatter UNICO degli orari: applica il formato 24h/12h scelto */
+    fmtHM(min) {
+      min = ((Math.round(min) % 1440) + 1440) % 1440;
+      const h = Math.floor(min / 60), m = min % 60;
+      if (DB.impostazioni.tempo.formato === '12h') {
+        const ap = h < 12 ? 'AM' : 'PM'; let hh = h % 12; if (hh === 0) hh = 12;
+        return hh + ':' + String(m).padStart(2, '0') + ' ' + ap;
+      }
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    },
 
     list:  t => DB[t],
     get:   (t, id) => DB[t].find(x => x.id === id),

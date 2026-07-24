@@ -1,4 +1,6 @@
-# Al-Maktaba · المكتبة
+# Addukira · ادَّكَرَ
+
+> *ادَّكَرَ* — «si ricordò». Dalla sura Yūsuf: il coppiere che, dopo anni, si rammentò di Giuseppe. Il nome dell'app: ciò che studi torna alla mente quando serve.
 
 Archivio personale di studio dell'Islam + compagno quotidiano.
 **v1 — scheletro front-end.** Dati salvati in locale (localStorage); al passo 2 lo strato dati (`js/store.js`) passa a Supabase senza toccare l'interfaccia.
@@ -23,6 +25,7 @@ e apri http://localhost:8000 (o :3000 con serve).
 index.html            markup e shell dell'app
 css/style.css         design system (verde notturno · pergamena · ottone)
 js/store.js           STRATO DATI — l'unico file che parlerà con Supabase
+js/i18n.js            traduzioni IT/AR + applicazione lingua (dir RTL)
 js/app.js             rendering, navigazione, ricerca, modale
 manifest.webmanifest  PWA: nome, icona, colori
 sw.js                 service worker minimo (cache shell)
