@@ -6,17 +6,32 @@
 <meta name="theme-color" content="#0f1e1a">
 <title>Addukira</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Spectral:wght@400;500;600&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<div class="gate on" id="gate">
+  <div class="gate-box">
+    <img class="gate-mark" src="icons/icon-192.png" alt="">
+    <div class="gate-n">Addukira</div>
+    <div class="gate-ar">ادَّكَرَ</div>
+    <div class="gate-s">Archivio di studio · accesso riservato</div>
+    <input id="gate-email" type="email" placeholder="Email" autocomplete="username">
+    <input id="gate-pw" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="gate-btn" onclick="Auth.entra()">Entra</button>
+    <div class="gate-err" id="gate-err"></div>
+  </div>
+</div>
+
 <div class="app">
 <aside class="rail" id="rail">
   <div class="brand">
-    <svg viewBox="0 0 40 40" fill="none"><path d="M20 3l14.7 8.5v17L20 37 5.3 28.5v-17z" stroke="#d3b573" stroke-width="1.3"/><circle cx="20" cy="20" r="2.6" fill="#d3b573"/></svg>
+    <img class="mark" src="icons/icon-192.png" alt="Addukira">
     <div><div class="n">Addukira</div><div class="ar">ادَّكَرَ</div></div>
   </div>
   <div class="grp" data-i18n="nav.group.life">La mia vita</div>
@@ -100,22 +115,19 @@
     <h2>Aggiungi un pensiero</h2>
     <div class="s">Scrivilo e, se vuoi, collegalo a ciò da cui nasce.</div>
     <div class="f"><label>Il pensiero</label><textarea id="pt-testo" placeholder="Cosa hai capito, notato, sentito…"></textarea></div>
-    <div class="row2">
-      <div class="f"><label>Collegato a</label>
-        <select id="pt-tipo">
-          <option value="">Niente — nato dalla giornata</option>
-          <option value="versetto">Un versetto</option>
-          <option value="sura">Una sura</option>
-          <option value="personaggio">Un personaggio</option>
-          <option value="tema">Un tema</option>
-          <option value="hadith">Un hadith</option>
-          <option value="storia">Una storia</option>
-          <option value="azione">Un dhikr / azione</option>
-        </select>
-      </div>
-      <div class="f"><label>Quale</label><select id="pt-target" disabled><option value="">—</option></select></div>
+    <div class="f"><label>Collegato a <span class="lbl-hint">puoi sceglierne più di uno</span></label>
+      <div class="chips" id="pt-tipi"></div>
     </div>
+    <div id="pt-quali"></div>
     <div class="m-act"><button class="btn2" id="pt-cancel">Annulla</button><button class="add" id="pt-save">Salva pensiero</button></div>
+  </div>
+</div>
+<div class="veil" id="veil-att">
+  <div class="modal">
+    <h2 id="att-h2">Nella mia giornata</h2>
+    <div class="s" id="att-s">Da dove nasce, quando torna, per quanto tempo.</div>
+    <div id="att-form"></div>
+    <div class="m-act"><button class="btn2" id="att-cancel">Annulla</button><button class="add" id="att-save">Salva</button></div>
   </div>
 </div>
 <div class="veil" id="veil-khatam">
@@ -133,9 +145,33 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/store.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/widgets.js"></script>
 <script src="js/app.js"></script>
+<script>
+  /* l'app resta dietro il cancello finché non c'è una sessione valida */
+  document.getElementById('gate-pw').addEventListener('keydown', e => { if (e.key === 'Enter') Auth.entra(); });
+  document.getElementById('gate-email').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('gate-pw').focus(); });
+
+  /* entrati: prima si caricano i dati, poi si disegna. Mai il contrario. */
+  window.onLoggato = async () => {
+    const g = document.getElementById('gate-btn');
+    if (g) g.textContent = 'Carico l’archivio…';
+    try {
+      await store.init();
+      avviaApp();
+    } catch (e) {
+      console.error('[avvio]', e);
+      const err = document.getElementById('gate-err');
+      if (err) { err.textContent = 'Non riesco a caricare l’archivio: ' + e.message; err.style.display = 'block'; }
+    }
+  };
+
+  Auth.init();
+</script>
 </body>
 </html>

@@ -20,6 +20,7 @@ button{font-family:inherit}
 .rail{background:var(--bg);border-right:1px solid var(--line-dk);position:sticky;top:0;height:100vh;overflow-y:auto;padding:24px 16px;display:flex;flex-direction:column}
 .brand{display:flex;gap:11px;align-items:center;padding-bottom:18px;border-bottom:1px solid var(--line-dk)}
 .brand svg{width:36px;height:36px;flex:none}
+.brand .mark{width:36px;height:36px;flex:none;border-radius:9px;display:block}
 .brand .n{font-family:'Spectral',serif;font-weight:600;font-size:18px}
 .brand .ar{font-family:'Amiri',serif;font-size:13px;color:var(--brass-lite)}
 .grp{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:rgba(246,241,228,.38);margin:18px 10px 6px;font-weight:600}
@@ -50,6 +51,10 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 /* ---------- oggi ---------- */
 .day-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px}
 .hijri{font-family:'Amiri',serif;font-size:17px;color:var(--brass)}
+/* data hijri traslitterata: testo latino, quindi font del testo e non Amiri */
+.hijri-lat{font-family:'Spectral',serif;font-size:16px;font-weight:500;letter-spacing:.01em}
+.day-head .eye{margin-bottom:5px}
+.day-head h1.t{margin-top:6px}
 .momento{margin-bottom:24px}
 .mo-t{display:flex;align-items:center;gap:11px;font-family:'Spectral',serif;font-weight:600;font-size:16.5px;margin-bottom:9px}
 .mo-t .ico{width:29px;height:29px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:13px}
@@ -58,8 +63,203 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .task{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;transition:.15s}
 .task:hover{border-color:var(--brass-lite)}
 .task.done{opacity:.55}
+.task.skip{opacity:.5}
+.task.skip .nm{text-decoration:line-through;text-decoration-color:rgba(246,241,228,.35)}
 .chk{width:21px;height:21px;border:1.6px solid var(--brass);border-radius:7px;flex:none;margin-top:2px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;cursor:pointer}
 .task.done .chk{background:var(--verify);border-color:var(--verify)}
+
+/* fatto / saltato */
+.task .acts{display:flex;gap:6px;flex:none;margin-top:1px}
+.tb{width:30px;height:30px;border-radius:9px;border:1.4px solid var(--line);background:transparent;color:var(--ink-soft);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;padding:0}
+.tb:hover{border-color:var(--brass-lite);color:var(--ink)}
+.tb.ok.on{background:var(--verify);border-color:var(--verify);color:#fff}
+.tb.no.on{background:var(--terra);border-color:var(--terra);color:#fff}
+.skipped{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--terra);border:1px solid rgba(168,90,62,.4);border-radius:12px;padding:1px 8px;font-weight:600;text-decoration:none;display:inline-block}
+
+/* orario fisso: icona discreta, l'input time nativo ci sta sopra */
+.hh{position:relative;display:inline-flex;align-items:center;opacity:.35;transition:.15s;cursor:pointer}
+.hh:hover,.task:hover .hh{opacity:.8}
+.hh.set{opacity:1}
+.hh .hh-i{font-size:11px}
+.hh.set .hh-i{display:none}
+.hh input[type=time]{background:transparent;border:0;color:var(--brass);font-family:inherit;font-size:10.5px;font-weight:600;padding:0;width:16px;opacity:0;cursor:pointer}
+.hh.set input[type=time]{width:auto;opacity:1;background:rgba(176,141,70,.14);border:1px solid rgba(176,141,70,.3);border-radius:12px;padding:1px 6px}
+.hh input[type=time]::-webkit-calendar-picker-indicator{opacity:0;position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+
+/* ---- attività: verso, orario, azione madre ---- */
+.oral{font-size:10.5px;background:rgba(74,127,140,.16);border:1px solid rgba(74,127,140,.38);color:#7fb3c0;border-radius:12px;padding:1px 8px;font-weight:600}
+.vs-ev{font-size:10px;letter-spacing:.05em;text-transform:uppercase;background:rgba(168,90,62,.16);border:1px solid rgba(168,90,62,.42);color:var(--terra);border-radius:12px;padding:1px 8px;font-weight:700}
+.task.ev{border-left:3px solid rgba(168,90,62,.5)}
+.pill.az{background:rgba(176,141,70,.12);border:1px solid rgba(176,141,70,.32);color:var(--brass)}
+
+/* ---- magazzino azioni: hadith collegati ---- */
+.hd-link{position:relative;padding-right:36px}
+.hd-link .body{cursor:pointer}
+.hd-link .body:hover{color:var(--brass-lite)}
+.unlink{position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;font-size:11px;line-height:1;padding:0}
+.unlink:hover{border-color:var(--terra);color:var(--terra)}
+.link-add{display:flex;gap:8px;margin:10px 0 6px;flex-wrap:wrap}
+.link-add select{flex:1;min-width:200px}
+.big-add{display:block;width:100%;margin-top:18px;padding:13px;font-size:14px}
+
+/* ---- righe attività (scheda azione + impostazioni) ---- */
+.att-row{display:flex;align-items:center;gap:9px;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:7px}
+.att-row.off{opacity:.45}
+.att-row .ar-b{flex:1;min-width:0}
+.att-row .ar-n{font-size:13.5px;font-weight:500;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.att-row .ar-m{font-size:11px;color:var(--ink-soft);margin-top:2px}
+.chip.gg-c{min-width:44px;text-align:center;justify-content:center}
+/* interruttore "da evitare": spento di default, acceso vira al terracotta */
+.chip.vs-tog.sel{background:rgba(168,90,62,.18);border-color:rgba(168,90,62,.5);color:var(--terra)}
+/* crea azione direttamente dall'hadith */
+.link-add.nuova-az{margin-top:6px;padding-top:10px;border-top:1px dashed var(--line)}
+.link-add.nuova-az input{flex:1;min-width:180px}
+.link-add select,.link-add input{padding:8px 10px}
+/* box pensiero in fondo a una scheda */
+.think-b{margin-top:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:10px 12px}
+
+/* ---- avvio khatam con periodo ---- */
+.kh-quick{margin:10px 0 6px}
+.kh-start{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:4px}
+.kh-start label{font-size:11.5px;color:var(--ink-soft)}
+.kh-start input[type=date]{padding:8px 10px}
+
+/* ---- il piano di lettura ---- */
+.piano{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--verify);border-radius:12px;padding:14px 16px;margin-bottom:18px}
+.piano.late{border-left-color:var(--terra)}
+.piano.over{border-left-color:var(--brass)}
+.pi-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:11px}
+.pi-g{font-family:'Spectral',serif;font-weight:600;font-size:15.5px;display:block}
+.pi-s{font-size:11.5px;color:var(--ink-soft)}
+.pi-badge{font-size:11.5px;font-weight:600;border-radius:12px;padding:3px 11px;background:rgba(74,124,89,.16);border:1px solid rgba(74,124,89,.4);color:var(--verify);white-space:nowrap}
+.piano.late .pi-badge{background:rgba(168,90,62,.16);border-color:rgba(168,90,62,.42);color:var(--terra)}
+.pi-gg{opacity:.7;font-weight:500;margin-left:5px}
+.prog2{position:relative;overflow:visible}
+.prog2 .tacca{position:absolute;top:-3px;width:2px;height:calc(100% + 6px);background:var(--ink-soft);opacity:.85}
+.prog2 .tacca::after{content:"";position:absolute;top:-3px;left:-2px;width:6px;height:6px;border-radius:50%;background:var(--ink-soft)}
+.pi-oggi{margin-top:11px;font-size:13.5px;line-height:1.6}
+.pi-oggi b{color:var(--brass-lite)}
+.pi-n{font-size:10.5px;background:rgba(176,141,70,.14);border:1px solid rgba(176,141,70,.3);color:var(--brass);border-radius:12px;padding:1px 8px;font-weight:600;margin-left:6px;white-space:nowrap}
+.pi-warn{margin-top:9px;font-size:11.5px;color:var(--brass);font-style:italic}
+
+/* ---- khatam completati: lo storico ---- */
+.att-row.kc{border-color:rgba(176,141,70,.28);background:linear-gradient(90deg,rgba(176,141,70,.07),transparent 60%)}
+.kc-seal{font-size:19px;color:var(--brass);flex:none;width:26px;text-align:center}
+.kc-ok{color:var(--verify);font-weight:600;margin-left:6px}
+.kc-late{color:var(--terra);font-weight:600;margin-left:6px}
+
+/* ---- ponte lettore → scheda del versetto ---- */
+.ab.go-aya{font-size:15px;letter-spacing:1px}
+.aya-meta{display:flex;gap:7px;flex-wrap:wrap;margin:-4px 0 14px}
+.riv{font-size:10.5px;letter-spacing:.04em;border-radius:12px;padding:2px 9px;font-weight:600;
+  background:rgba(176,141,70,.14);border:1px solid rgba(176,141,70,.32);color:var(--brass)}
+.riv.medinese{background:rgba(74,127,140,.14);border-color:rgba(74,127,140,.36);color:#7fb3c0}
+.riv.n{background:transparent;border-color:var(--line);color:var(--ink-soft);font-weight:500}
+
+/* ---- marcatori nel flusso di lettura ---- */
+.sura-sep .ss-j{font-family:'Inter',sans-serif;font-size:10.5px;font-weight:500;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--ink-soft);margin-left:10px;opacity:.75}
+.juz-sep,.pag-sep{display:flex;align-items:center;gap:12px;margin:26px 0 18px;
+  font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);font-weight:600}
+.juz-sep::before,.juz-sep::after,.pag-sep::before,.pag-sep::after{content:"";flex:1;height:1px;background:var(--line)}
+.pag-sep{color:var(--ink-soft);font-weight:500}
+
+/* il traguardo del giorno: una riga, non un muro */
+.traguardo{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:22px 0;padding:11px 15px;
+  border-radius:11px;background:linear-gradient(90deg,rgba(74,124,89,.14),transparent);
+  border:1px solid rgba(74,124,89,.35);border-left:3px solid var(--verify)}
+.traguardo.lontano{background:linear-gradient(90deg,rgba(176,141,70,.1),transparent);
+  border-color:rgba(176,141,70,.3);border-left-color:var(--brass)}
+.tg-l{font-family:'Spectral',serif;font-weight:600;font-size:14px;color:var(--verify);white-space:nowrap}
+.traguardo.lontano .tg-l{color:var(--brass)}
+.tg-s{font-size:11.5px;color:var(--ink-soft);flex:1;min-width:150px}
+.tg-b{background:transparent;border:1px solid rgba(74,124,89,.45);color:var(--verify);border-radius:9px;
+  padding:5px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.tg-b:hover{background:rgba(74,124,89,.16)}
+
+/* ---- analisi statistica della memorizzazione ---- */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+.stat.ok{border-color:rgba(74,124,89,.4)}
+.stat.late{border-color:rgba(168,90,62,.42)}
+.stat .s-n{font-family:'Spectral',serif;font-size:26px;font-weight:600;line-height:1.1;color:var(--brass-lite)}
+.stat.ok .s-n{color:var(--verify)}
+.stat.late .s-n{color:var(--terra)}
+.stat .s-l{font-size:11px;color:var(--ink-soft);margin-top:5px;line-height:1.45}
+.stat .s-sub{opacity:.75}
+.stima{font-size:12.5px;padding:11px 15px;border-radius:11px;margin-bottom:16px;
+  background:rgba(74,124,89,.1);border:1px solid rgba(74,124,89,.3)}
+.stima.late{background:rgba(168,90,62,.1);border-color:rgba(168,90,62,.32)}
+.stima b{color:var(--brass-lite)}
+
+/* ---- scelta dell'obiettivo di memorizzazione ---- */
+.mz-lab{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin:14px 0 7px}
+.mz-n{width:64px;padding:5px 9px;border-radius:12px;border:1px solid rgba(176,141,70,.4);
+  background:rgba(176,141,70,.1);color:var(--brass);font-family:inherit;font-size:12.5px;font-weight:600;text-align:center}
+.mz-preview{margin:14px 0 12px;padding:11px 14px;border-radius:11px;
+  background:rgba(176,141,70,.1);border:1px solid rgba(176,141,70,.28);font-size:13px;line-height:1.6}
+.mz-preview b{color:var(--brass-lite)}
+.mz-rate{display:inline-block;margin-left:8px;font-size:11px;font-weight:600;color:var(--verify);
+  background:rgba(74,124,89,.14);border:1px solid rgba(74,124,89,.34);border-radius:12px;padding:1px 9px}
+.mz-done{display:inline-block;margin-left:8px;font-size:10.5px;font-weight:600;color:var(--brass);
+  background:rgba(176,141,70,.14);border:1px solid rgba(176,141,70,.3);border-radius:12px;padding:1px 8px}
+/* scelta delle sure specifiche */
+.sure-sel{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:9px}
+.sure-sel .chip{cursor:pointer}
+.mz-sura-add{padding:7px 10px;min-width:190px;font-size:12.5px}
+
+/* ---- vista muṣḥaf: la pagina stampata ---- */
+.lettore-tab{display:flex;gap:8px;margin-bottom:16px}
+.mushaf{background:#f6f1e4;border:1px solid rgba(176,141,70,.5);border-radius:6px;
+  padding:26px 24px 16px;margin-bottom:20px;box-shadow:0 2px 18px rgba(0,0,0,.28);
+  position:relative;outline:2px solid rgba(176,141,70,.28);outline-offset:5px}
+.mushaf-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;
+  padding-bottom:11px;margin-bottom:16px;border-bottom:1.5px solid rgba(176,141,70,.45)}
+.mh-ar{font-family:'Amiri',serif;font-size:23px;color:#4a3a1c;font-weight:700}
+.mh-n{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#8a7346;font-weight:600}
+.basmala{font-family:'Amiri',serif;font-size:22px;text-align:center;color:#4a3a1c;margin:6px 0 18px}
+.mushaf-text{font-family:'Amiri',serif;font-size:27px;line-height:2.5;color:#1c1710;
+  text-align:justify;text-align-last:center;word-spacing:.06em}
+.mushaf-text .mv.hl{background:rgba(176,141,70,.3);border-radius:4px}
+.mushaf-text .mv.bm{border-bottom:2.5px solid #b08d46}
+.mv-n{color:#9a6f2a;font-size:24px;cursor:pointer;padding:0 2px}
+.mv-n:hover{color:#c9922f}
+.mushaf-foot{text-align:center;font-family:'Amiri',serif;font-size:13px;color:#8a7346;
+  padding-top:12px;margin-top:10px;border-top:1px solid rgba(176,141,70,.35)}
+.mushaf-note{font-size:11.5px;color:var(--ink-soft);font-style:italic;line-height:1.65;
+  padding:12px 15px;border-radius:11px;background:var(--panel-2);border:1px solid var(--line)}
+.mushaf-note b{color:var(--brass);font-style:normal}
+/* memorizzazione sulla pagina: quel che sai già si accende */
+.mushaf-text .mv.mem{background:rgba(74,124,89,.22);border-radius:4px;box-shadow:0 0 0 1px rgba(74,124,89,.3)}
+.mushaf-text .mv[onclick]{cursor:pointer;transition:background .15s}
+.mushaf-text .mv[onclick]:hover{background:rgba(176,141,70,.18);border-radius:4px}
+.mem-conta{font-size:12px;color:var(--ink-soft);margin-bottom:12px;padding:9px 14px;border-radius:11px;
+  background:var(--panel-2);border:1px solid var(--line)}
+
+/* un pensiero può avere più ancore */
+.anchors{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.anchors .anchor{display:inline-block;margin:0}
+.lbl-hint{font-weight:400;text-transform:none;letter-spacing:0;opacity:.6;margin-left:6px}
+
+/* ---- cancello di accesso ---- */
+.gate{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 50% 30%,#16281f,#0b1712 70%);padding:22px}
+.gate.on{display:flex}
+.gate-box{width:100%;max-width:340px;text-align:center;background:rgba(22,40,31,.72);
+  border:1px solid var(--line);border-radius:18px;padding:32px 26px 26px;
+  box-shadow:0 18px 60px rgba(0,0,0,.5)}
+.gate-mark{width:62px;height:62px;border-radius:15px;margin-bottom:14px}
+.gate-n{font-family:'Spectral',serif;font-size:23px;font-weight:600;letter-spacing:.01em}
+.gate-ar{font-family:'Amiri',serif;font-size:17px;color:var(--brass);margin-top:2px}
+.gate-s{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin:14px 0 20px}
+.gate-box input{width:100%;padding:11px 13px;margin-bottom:10px;border-radius:10px;
+  border:1px solid var(--line);background:rgba(0,0,0,.22);color:var(--ink);font-family:inherit;font-size:14px}
+.gate-box input:focus{outline:none;border-color:var(--brass)}
+.gate-box button{width:100%;padding:12px;border-radius:10px;border:0;cursor:pointer;
+  background:var(--brass);color:#16281f;font-family:inherit;font-size:14px;font-weight:600;margin-top:4px}
+.gate-box button:hover{background:var(--brass-lite)}
+.gate-box button:disabled{opacity:.6;cursor:default}
+.gate-err{display:none;margin-top:13px;font-size:12px;color:var(--terra);line-height:1.5}
 .task .b{flex:1;min-width:0}
 .task .nm{font-weight:500;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .rep{font-size:10.5px;background:rgba(176,141,70,.14);border:1px solid rgba(176,141,70,.3);color:var(--brass);border-radius:12px;padding:1px 8px;font-weight:600}
@@ -310,3 +510,18 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
   .mb{display:inline-flex}
   .row2{grid-template-columns:1fr}
 }
+
+/* da dove arrivano gli orari di preghiera */
+.tzc.fonte{border-color:rgba(176,141,70,.4);color:var(--brass)}
+
+/* ---- orari di preghiera in doppia lettura ---- */
+.orari{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:6px 0 2px}
+.or{text-align:center;padding:7px 3px;border-radius:9px;border:1px solid rgba(246,241,228,.1);transition:.15s}
+.or-n{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(246,241,228,.5);font-weight:600}
+.or-t{font-family:'Spectral',serif;font-size:15px;font-weight:600;color:var(--panel);margin-top:2px;line-height:1.2}
+.or-c{font-size:9.5px;color:var(--brass);margin-top:1px}
+.or-c span{opacity:.6;font-size:8.5px}
+.or.via{opacity:.4}
+.or.next{border-color:rgba(211,181,115,.55);background:rgba(176,141,70,.14)}
+.or.next .or-t{color:var(--brass-lite)}
+@media(max-width:620px){.orari{grid-template-columns:repeat(3,1fr)}}

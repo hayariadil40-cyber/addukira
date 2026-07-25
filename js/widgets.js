@@ -6,22 +6,34 @@
    ============================================================ */
 const Widgets = (() => {
   const $id = i => document.getElementById(i);
+  const hm2min = t => { const [h,mi]=String(t).split(':').map(Number); return (h||0)*60+(mi||0); };
   const hhmm = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.round(m) % 60).padStart(2, '0');
 
   /* ---- CIELO: arco del sole + orari di preghiera (esempio) ---- */
-  const P = [
+  /* gli orari veri arrivano dal calendario caricato (store.preghieraMin);
+     questi restano solo come forma della curva se il calendario manca. */
+  const P_BASE = [
     { k: 'Fajr', key: 'fajr', t: 230, n: 1 }, { k: 'Shurūq', key: 'shuruq', t: 340, sr: 1 },
     { k: 'Ẓuhr', key: 'zuhr', t: 800 }, { k: 'ʿAṣr', key: 'asr', t: 1035 },
     { k: 'Maghrib', key: 'maghrib', t: 1255, ss: 1 }, { k: 'ʿIshāʾ', key: 'isha', t: 1355, n: 1 },
   ];
-  const SR = 340, SS = 1255, CX = 200, CY = 112, R = 88;
-  const pos = t => { const f = Math.min(1, Math.max(0, (t - SR) / (SS - SR))), a = Math.PI * (1 - f); return { x: CX + R * Math.cos(a), y: CY - R * Math.sin(a) }; };
+  const P = () => P_BASE.map(p => {
+    const v = store.preghieraMin(p.key);
+    return { ...p, t: v != null ? v : p.t };
+  });
+  /* l'arco va da alba a tramonto: anche quelli seguono il calendario */
+  const sunRise = () => { const v = store.preghieraMin('shuruq'); return v != null ? v : 340; };
+  const sunSet  = () => { const v = store.preghieraMin('maghrib'); return v != null ? v : 1255; };
+  const CX = 200, CY = 112, R = 88;
+  const pos = t => { const SR = sunRise(), SS = sunSet();
+    const f = Math.min(1, Math.max(0, (t - SR) / Math.max(1, SS - SR))), a = Math.PI * (1 - f);
+    return { x: CX + R * Math.cos(a), y: CY - R * Math.sin(a) }; };
 
   function drawArc() {
     const S = store.getSettings(), T = S.tempo, PR = S.preghiere;
-    const m = store.nowMin(T.fuso), day = m >= SR && m <= SS;
+    const m = store.nowMin(T.fuso), SR = sunRise(), SS = sunSet(), day = m >= SR && m <= SS;
     /* preghiere visibili, con correzione in minuti applicata */
-    const vis = P.filter(pr => PR.mostra[pr.key]).map(pr => ({ ...pr, t: pr.t + (PR.correzioni[pr.key] || 0) }));
+    const vis = P().filter(pr => PR.mostra[pr.key]).map(pr => ({ ...pr, t: pr.t + (PR.correzioni[pr.key] || 0) }));
     let s = `<path d="M${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}" fill="none" stroke="rgba(246,241,228,.16)" stroke-width="1.5"/>`;
     if (day) { const p = pos(m); s += `<path d="M${CX - R} ${CY} A ${R} ${R} 0 0 1 ${p.x} ${p.y}" fill="none" stroke="#b08d46" stroke-width="2"/>`; }
     s += `<line x1="14" y1="${CY}" x2="386" y2="${CY}" stroke="rgba(246,241,228,.28)"/>`;
@@ -42,10 +54,29 @@ const Widgets = (() => {
     $id('w-state').textContent = past ? past.k + ' passato' : (vis.length ? 'prima di ' + vis[0].k : '—');
     if (vis.length) { const nx = vis.find(p => p.t > m) || vis[0]; let df = nx.t - m; if (df < 0) df += 1440; $id('w-next').textContent = `▸ prossima: ${nx.k} tra ${Math.floor(df / 60)}h ${df % 60}m`; }
     else $id('w-next').textContent = '—';
-    /* orologi affiancati (fusi extra) */
+    /* i sei orari in chiaro: nel fuso in cui ragioni, e sotto come li
+       stampa la moschea. Due letture della stessa ora, mai una sola. */
+    const dd = store.orariDoppi();
+    const oraEl = $id('w-orari');
+    if (oraEl) {
+      const adesso = m;
+      oraEl.innerHTML = dd.map(o => {
+        const t = hm2min(o.ora);
+        const passata = adesso >= t;
+        const prossima = !passata && dd.filter(x => hm2min(x.ora) > adesso)[0] === o;
+        return `<div class="or ${passata ? 'via' : ''} ${prossima ? 'next' : ''}">
+          <div class="or-n">${o.nome}</div>
+          <div class="or-t">${o.ora}</div>
+          ${o.oraCal ? `<div class="or-c">${o.oraCal} <span>${store.tzBreve(o.tzCal)}</span></div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    /* orologi affiancati (fusi extra) + da dove vengono gli orari */
+    const f = store.fonteOrari();
     $id('w-clocks').innerHTML = T.fusi_extra
       .map(tz => `<span class="tzc">${tz.split('/').pop().replace('_', ' ')} ${store.fmtHM(store.nowMin(tz))}</span>`)
-      .join('');
+      .join('') + `<span class="tzc fonte" title="${f.tz ? 'orari scritti in ' + f.tz : 'nessun calendario per oggi'}">🕌 ${f.testo}${f.scarto ? ` (${f.scarto > 0 ? '+' : ''}${f.scarto}′)` : ''}</span>`;
   }
 
   /* ---- MAREA (dati d'esempio) ---- */
@@ -101,6 +132,7 @@ const Widgets = (() => {
         <div class="sky-top"><div class="now" id="w-now">—</div><div class="state" id="w-state">—</div></div>
         <div class="sky-clocks" id="w-clocks"></div>
         <svg viewBox="0 0 400 150" id="w-arc" aria-label="Arco del giorno e orari di preghiera"></svg>
+        <div class="orari" id="w-orari"></div>
         <div class="sky-foot" id="w-next">—</div>
       </div>
       <div class="duo">

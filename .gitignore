@@ -1,0 +1,21 @@
+# Il repo è PUBBLICO. Qui non deve mai entrare contenuto protetto.
+# La traduzione del Corano (Piccardo) sta solo nel database, mai in un file.
+*.quran.json
+quran*.json
+traduzion*.json
+*piccardo*
+
+# segreti (la chiave `publishable` in js/supabase-config.js è pubblica per
+# design e resta versionata: la protezione è la RLS, non l'oscurità)
+.env
+.env.*
+*service_role*
+*.secrets.*
+
+# roba di sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+node_modules/
+.vscode/
+.idea/

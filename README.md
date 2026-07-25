@@ -29,7 +29,7 @@ js/i18n.js            traduzioni IT/AR + applicazione lingua (dir RTL)
 js/app.js             rendering, navigazione, ricerca, modale
 manifest.webmanifest  PWA: nome, icona, colori
 sw.js                 service worker minimo (cache shell)
-icons/icon.svg        icona dell'app
+icons/                icone app (192/512, maskable, apple-touch, favicon)
 ```
 
 ## Architettura in una riga
