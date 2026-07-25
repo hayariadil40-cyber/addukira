@@ -309,7 +309,10 @@ function renderLettura() {
     <span class="chip ${modo === 'flusso' ? 'sel' : ''}" onclick="setLettore('flusso')">📜 Flusso</span>
     <span class="chip ${modo === 'pagina' ? 'sel' : ''}" onclick="setLettore('pagina')">📖 Pagina</span>
   </div>`;
-  if (modo === 'pagina') { html += renderMushaf({ modo: 'lettura', attivo: active }); $('#p-lettura').innerHTML = html; return; }
+  if (modo === 'pagina') {
+    html += renderMushaf({ modo: 'lettura', attivo: active }) + bloccoContinua();
+    $('#p-lettura').innerHTML = html; armaSentinella(); return;
+  }
 
   let lastSura = null, lastPagina = null, traguardoMesso = false;
   store.list('ayat_demo').forEach(v => {
@@ -360,8 +363,10 @@ function renderLettura() {
       <span class="tg-l">⌁ traguardo di oggi</span>
       <span class="tg-s">più avanti, a ${esc(store.fmtPos(P.fermarsiA))} · ${P.daLeggereOggi} versetti da qui</span></div>`;
   }
+  html += bloccoContinua();
   html += `<div class="sujud"><div class="l">۩ Versetti di prosternazione</div>Quando arrivi a un'aya col simbolo ۩, l'app mostrerà la tua dua del sujūd. Al completamento del khatam: la dua di completamento e +1 al contatore.</div>`;
   $('#p-lettura').innerHTML = html;
+  armaSentinella();
 }
 
 /* scorciatoie "un mese / due mesi…": spostano la data di fine */
@@ -383,13 +388,15 @@ function avviaKhatam() {
 
 /* dal lettore alla scheda del versetto: stesso testo, ma con tutto intorno.
    Se quell'aya non è ancora una riga di `versetti`, la creo al volo. */
-function apriAya(sid, aya) {
-  let v = store.list('versetti').find(x => x.sura_id === sid && x.numero === aya);
+async function apriAya(sid, aya) {
+  let v = store.list('versetti').find(x => x.sura_id === +sid && x.aya === +aya);
   if (!v) {
-    const demo = store.list('ayat_demo').find(x => x.sura_id === sid && x.aya === aya) || {};
-    v = store.add('versetti', { sura_id: sid, numero: aya, arabo: demo.arabo || '', traduzione: demo.it || '', contesto: '', nota: '' });
+    /* fuori dalla finestra caricata: la chiedo al database */
+    const r = await store.cercaAyat({ sura: sid, numero: aya, limite: 1 });
+    v = r[0];
+    if (!v) { toast('Versetto non trovato'); return; }
+    store.ricordaAya(v);
   }
-  backTo = 'lettura';
   openDetail('versetto', v.id);
 }
 
@@ -445,6 +452,43 @@ function renderMushaf(cfg) {
 }
 const lastPag = sid => { const s = store.get('sure', sid); return s ? `سورة ${esc(s.nome_arabo)}` : ''; };
 
+/* ---- il lettore non finisce mai contro un muro ----
+   In fondo c'è un margine che, quando lo raggiungi scorrendo, chiede
+   i versetti successivi. Resta anche il bottone, per chi preferisce. */
+function bloccoContinua() {
+  if (store.fineCorano()) {
+    return `<div class="fine-corano">۩ Sei arrivato alla fine del Corano.</div>`;
+  }
+  const p = store._ayaDaIndice(store.finestra().a + 1);
+  return `<div class="carica-piu" id="lp-sentinella">
+    <button class="kh-b start" onclick="caricaPiu()">Continua da ${esc(store.fmtPos(p))} ⌄</button>
+  </div>`;
+}
+
+let lpInCorso = false, lpObs = null;
+async function caricaPiu() {
+  if (lpInCorso || store.fineCorano()) return;
+  lpInCorso = true;
+  const btn = document.querySelector('#lp-sentinella button');
+  if (btn) { btn.textContent = 'Carico…'; btn.disabled = true; }
+  const y = window.scrollY;                 /* i nuovi versetti si aggiungono in coda */
+  const n = await store.caricaAncora();
+  lpInCorso = false;
+  if (!n) { if (btn) { btn.textContent = 'Niente altro'; } return; }
+  const modo = (store.getSettings().vista.lettore) || 'flusso';
+  modo === 'pagina' ? renderLettura() : renderLettura();
+  window.scrollTo(0, y);                    /* si resta dove si stava leggendo */
+  armaSentinella();
+}
+/* carica da solo quando la fine entra nello schermo */
+function armaSentinella() {
+  if (lpObs) lpObs.disconnect();
+  const s = document.getElementById('lp-sentinella');
+  if (!s || !('IntersectionObserver' in window)) return;
+  lpObs = new IntersectionObserver(e => { if (e[0].isIntersecting) caricaPiu(); }, { rootMargin: '400px' });
+  lpObs.observe(s);
+}
+
 function setLettore(m) {
   store.setSettings({ vista: { lettore: m } });
   renderLettura();
@@ -492,6 +536,13 @@ const PIANI = {
   personalizzato: { label: 'Personalizzato',                       desc: 'Ritmo e obiettivo li definirai tu (in costruzione).' },
 };
 const mzSeq = n => Array.from({ length: n }, (_, i) => i + 1);
+/* evita di richiedere due volte di fila lo stesso caricamento */
+let mzCarico = null;
+/* quanti versetti di quella sura hai già memorizzato */
+function mzFattiInSura(n) {
+  const da = store.idxDi(n, 1), a = store.idxDi(n, store.vvSura(n));
+  return store.list('memorizzato').filter(m => m.aya_id >= da && m.aya_id <= a).length;
+}
 /* stima pagine del muṣḥaf (604) per ḥizb e per ottava — approssimata, in bozza */
 function hizbPages(h) { return [Math.round((h - 1) * 604 / 60) + 1, Math.round(h * 604 / 60)]; }
 function ottavaPages(h, o) {
@@ -596,17 +647,41 @@ function renderMemorizzazione() {
   }
   if (P.scaduto) html += `<div class="pi-warn">Il periodo che ti eri dato è finito. Il conto dei versetti resta: puoi continuare o aprire un piano nuovo.</div>`;
 
-  /* filtro: cosa studiare (ḥizb + ottava) */
-  html += `<div class="mz-filter"><div class="mz-filter-t">Cosa vuoi studiare oggi</div>
-    <div class="mz-controls">
-      <label>Ḥizb <select onchange="store.setStudio({hizb:+this.value});renderMemorizzazione()">${mzSeq(60).map(i => `<option value="${i}" ${st.hizb === i ? 'selected' : ''}>${i}</option>`).join('')}</select></label>
-      <label>Ottava <select onchange="store.setStudio({ottava:+this.value});renderMemorizzazione()">${mzSeq(8).map(i => `<option value="${i}" ${st.ottava === i ? 'selected' : ''}>${i}/8</option>`).join('')}</select></label>
-      <span class="mz-range">≈ pagine ${ps}–${pe} del muṣḥaf</span>
-    </div></div>`;
+  /* --- cosa studiare: se il piano è su sure scelte, comandano quelle --- */
+  const sureDelPiano = (P.obiettivo_tipo === 'sura' && Array.isArray(P.obiettivo_n)) ? P.obiettivo_n : null;
+  const suraTarget = sureDelPiano ? (st.sura && sureDelPiano.includes(st.sura) ? st.sura : sureDelPiano[0]) : null;
 
-  /* Corano del range (bozza: versetti demo) — a lista o come pagina del muṣḥaf */
+  html += `<div class="mz-filter"><div class="mz-filter-t">Cosa vuoi studiare oggi</div>`;
+  if (sureDelPiano) {
+    html += `<div class="chips">${sureDelPiano.map(n => {
+      const fatti = mzFattiInSura(n);
+      return `<span class="chip ${n === suraTarget ? 'sel' : ''}" onclick="store.setStudio({sura:${n}});renderMemorizzazione()">
+        ${esc(store.nomeSura(n))} <span class="ch-n">${fatti}/${store.vvSura(n)}</span></span>`;
+    }).join('')}</div>`;
+  } else {
+    html += `<div class="mz-controls">
+      <label>Ḥizb <select onchange="store.setStudio({hizb:+this.value});renderMemorizzazione()">${mzSeq(60).map(i => `<option value="${i}" ${st.hizb === i ? 'selected' : ''}>${i}</option>`).join('')}</select></label>
+      <label>Rubʿ <select onchange="store.setStudio({rubu:+this.value});renderMemorizzazione()">${mzSeq(4).map(i => `<option value="${i}" ${(st.rubu || 1) === i ? 'selected' : ''}>${i}/4</option>`).join('')}</select></label>
+      <span class="mz-range">≈ pagine ${ps}–${pe} del muṣḥaf</span>
+    </div>`;
+  }
+  html += `</div>`;
+
+  /* --- il testo giusto dev'essere caricato prima di disegnarlo --- */
+  if (suraTarget && store.suraInFinestra() !== suraTarget) {
+    $('#p-memorizzazione').innerHTML = html + `<div class="empty">Carico ${esc(store.nomeSura(suraTarget))}…</div>`;
+    if (mzCarico !== suraTarget) {           /* guardia: mai due caricamenti uguali di fila */
+      mzCarico = suraTarget;
+      store.caricaAyat({ sura: suraTarget }).then(() => renderMemorizzazione());
+    }
+    return;
+  }
+
   const mzModo = store.getSettings().vista.memorizzatore || 'pagina';
-  html += `<div class="mz-page-head">Ḥizb ${st.hizb} · Ottava ${st.ottava}/8 <span class="mz-note">bozza — il testo reale del range arriverà con l'import del Corano</span></div>`;
+  const testa = suraTarget
+    ? `${store.nomeSura(suraTarget)} · sura ${suraTarget} <span class="mz-note">${store.vvSura(suraTarget)} versetti</span>`
+    : `Ḥizb ${st.hizb} · Rubʿ ${st.rubu || 1}/4 <span class="mz-note">il filtro per ḥizb userà i dati reali del muṣḥaf</span>`;
+  html += `<div class="mz-page-head">${testa}</div>`;
   html += `<div class="lettore-tab">
     <span class="chip ${mzModo === 'pagina' ? 'sel' : ''}" onclick="setMemVista('pagina')">📖 Pagina</span>
     <span class="chip ${mzModo === 'lista' ? 'sel' : ''}" onclick="setMemVista('lista')">☑ Lista</span>
@@ -746,7 +821,7 @@ function savePensiero() {
 /* ============================================================
    STUDIO — card e pagine
    ============================================================ */
-const vCard = v => { const s = suraOf(v.sura_id); return `<div class="card" onclick="openDetail('versetto','${v.id}')"><span class="k">${s ? s.numero + ' · ' + s.translit : ''} : ${v.numero}</span><div class="arh">${esc(v.arabo)}</div><p>${esc(v.traduzione)}</p></div>`; };
+const vCard = v => { const s = suraOf(v.sura_id); return `<div class="card" onclick="apriAya(${v.sura_id},${v.aya})"><span class="k">${s ? s.numero + ' · ' + s.translit : ''} : ${v.numero}</span><div class="arh">${esc(v.arabo)}</div><p>${esc(v.traduzione)}</p></div>`; };
 const hCard = h => `<div class="card" onclick="openDetail('hadith','${h.id}')"><span class="k">${esc(h.numero_rif || h.raccolta)}</span><h3>${esc(h.testo.slice(0, 50))}${h.testo.length > 50 ? '…' : ''}</h3><p>${esc(h.nota || h.isnad)}</p><div class="ft"><span class="dot ${h.grado === 'sahih' ? '' : 'h'}">${GRADO[h.grado]}</span></div></div>`;
 const pCard = p => `<div class="card" onclick="openDetail('personaggio','${p.id}')"><span class="k">${CAT[p.categoria]}</span><h3>${esc(p.nome)}</h3><div class="arh">${esc(p.nome_arabo || '')}</div><p>${esc(p.biografia || '')}</p></div>`;
 const sCard = s => { const su = suraOf(s.sura_id); return `<div class="card" onclick="openDetail('storia','${s.id}')"><span class="k">${su ? 'Sura ' + su.numero : ''}</span><h3>${esc(s.titolo)}</h3><p>${esc(s.riassunto || '')}</p></div>`; };
@@ -786,25 +861,32 @@ function renderQuran() {
 }
 
 /* filtra i versetti per sura / numero / parole chiave e mostra i risultati */
+/* la ricerca interroga il database: tutti e 6236 i versetti, non solo
+   quelli in memoria. Async, con un piccolo ritardo per non partire a ogni tasto. */
+let qsTimer = null, qsSeq = 0;
 function quranSearch() {
+  clearTimeout(qsTimer);
+  qsTimer = setTimeout(quranCerca, 260);
+}
+async function quranCerca() {
   const suraId = $('#qs-sura').value ? +$('#qs-sura').value : null;
   const aya = $('#qs-aya').value ? +$('#qs-aya').value : null;
-  const kw = ($('#qs-kw').value || '').trim().toLowerCase();
+  const kw = ($('#qs-kw').value || '').trim();
   const box = $('#qs-results');
+  if (!box) return;
 
-  if (!suraId && !aya && !kw) { box.innerHTML = ''; return; }   /* nessun criterio → nessun risultato */
+  if (!suraId && !aya && !kw) { box.innerHTML = ''; return; }
 
-  let list = store.list('versetti');
-  if (suraId) list = list.filter(v => v.sura_id === suraId);
-  if (aya)    list = list.filter(v => v.numero === aya);
-  if (kw)     list = list.filter(v => (v.arabo + ' ' + v.traduzione + ' ' + (v.contesto || '')).toLowerCase().includes(kw));
+  const mio = ++qsSeq;                       /* scarta le risposte vecchie */
+  box.innerHTML = `<div class="empty">Cerco…</div>`;
+  const list = await store.cercaAyat({ sura: suraId, numero: aya, testo: kw });
+  if (mio !== qsSeq) return;
 
   if (!list.length) {
-    box.innerHTML = `<div class="empty">Nessun versetto trovato tra quelli caricati.<br>
-      <span class="mz-note">Il testo completo del Corano (6.236 versetti) arriverà con l'import: allora la ricerca coprirà tutto.</span></div>`;
+    box.innerHTML = `<div class="empty">Nessun versetto trovato.</div>`;
     return;
   }
-  box.innerHTML = `<div class="qs-count">${list.length} versett${list.length === 1 ? 'o' : 'i'}</div>
+  box.innerHTML = `<div class="qs-count">${list.length} versett${list.length === 1 ? 'o' : 'i'}${list.length >= 80 ? ' (primi 80)' : ''}</div>
     <div class="grid">${list.map(vCard).join('')}</div>`;
 }
 function quranPickSura(id) { const s = $('#qs-sura'); if (s) { s.value = id; quranSearch(); window.scrollTo(0, 0); } }

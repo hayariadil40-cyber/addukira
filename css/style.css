@@ -525,3 +525,10 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .or.next{border-color:rgba(211,181,115,.55);background:rgba(176,141,70,.14)}
 .or.next .or-t{color:var(--brass-lite)}
 @media(max-width:620px){.orari{grid-template-columns:repeat(3,1fr)}}
+.chip .ch-n{opacity:.65;font-size:10px;font-weight:500;margin-left:3px}
+
+/* ---- il lettore continua: nessun muro in fondo alla finestra ---- */
+.carica-piu{display:flex;justify-content:center;padding:22px 0 8px}
+.carica-piu button{min-width:230px}
+.fine-corano{text-align:center;font-family:'Spectral',serif;font-size:15px;color:var(--brass);
+  padding:22px;margin-top:14px;border-top:1px solid var(--line)}

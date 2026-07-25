@@ -257,14 +257,16 @@ const store = (() => {
 
   /* carica una finestra di versetti: attorno a un punto, o una sura intera */
   let finestra = { da: 0, a: 0 };
+  let finestraSura = null;   /* numero di sura, se la finestra e' una sura intera */
+  let ayeExtra = [];         /* ayat aperte dalla ricerca, fuori dalla finestra corrente */
   async function caricaAyat({ centro, sura, da, a, quanti = 60 } = {}) {
     let q = sb.from('ayat').select('*').order('id');
-    if (sura) { q = q.eq('sura', sura); finestra = { da: 0, a: 0 }; }
+    if (sura) { q = q.eq('sura', sura); finestra = { da: 0, a: 0 }; finestraSura = +sura; }
     else {
       const i = Math.max(1, (da || centro || 1));
       const f = Math.min(TOTALE_AYA, a || (i + quanti - 1));
       q = q.gte('id', i).lte('id', f);
-      finestra = { da: i, a: f };
+      finestra = { da: i, a: f }; finestraSura = null;
     }
     const { data, error } = await q;
     if (error) { console.error('[store] ayat', error.message); return []; }
@@ -277,7 +279,9 @@ const store = (() => {
       const { data: tr } = await sb.from('ayat_traduzioni').select('aya_id,testo').in('aya_id', ids).eq('lang', 'it');
       const mappa = {};
       (tr || []).forEach(t => { mappa[t.aya_id] = t.testo; });
-      DB.ayat.forEach(x => { x.it = mappa[x.id] || ''; });
+      /* `it` per il lettore, `traduzione` per le schede e la ricerca:
+         due nomi per lo stesso testo, così nessuna pagina resta a secco. */
+      DB.ayat.forEach(x => { x.it = mappa[x.id] || ''; x.traduzione = x.it; });
     }
     return DB.ayat;
   }
@@ -324,7 +328,17 @@ const store = (() => {
     get(t, id) {
       if (t === 'sure') return DB.sure.find(x => String(x.numero) === String(id));
       if (t === 'asma') return DB.asma.find(x => String(x.numero) === String(id));
-      return (this.list(t) || []).find(x => String(x.id) === String(id));
+      const trovato = (this.list(t) || []).find(x => String(x.id) === String(id));
+      if (trovato) return trovato;
+      /* un versetto aperto dalla ricerca puo' stare fuori dalla finestra */
+      if (t === 'versetti' || t === 'ayat_demo') return ayeExtra.find(x => String(x.id) === String(id));
+      return undefined;
+    },
+    /* tiene da parte un'aya aperta fuori finestra, cosi' la scheda la trova */
+    ricordaAya(riga) {
+      if (!riga) return;
+      if (!ayeExtra.some(x => x.id === riga.id)) ayeExtra.push(riga);
+      if (ayeExtra.length > 40) ayeExtra.shift();
     },
     add(t, row) {
       const tabella = TIPO_VOCE[t] ? 'voci' : t;
@@ -524,6 +538,55 @@ const store = (() => {
     sureTutte() { return VERSI_SURA.map((vv, i) => ({ numero: i + 1, nome: this.nomeSura(i + 1), vv })); },
     fmtPos(p) { const s = DB.sure.find(x => x.numero === p.sura); return (s ? s.translit + ' ' : 'Sura ') + p.sura + ':' + p.aya; },
     finestra: () => finestra,
+    suraInFinestra: () => finestraSura,
+
+    /* allunga la finestra in avanti: il lettore non deve mai finire
+       contro un muro. Restituisce quanti versetti ha aggiunto. */
+    async caricaAncora(quanti = 60) {
+      if (!DB.ayat.length) return 0;
+      const ultimo = DB.ayat[DB.ayat.length - 1].id;
+      if (ultimo >= TOTALE_AYA) return 0;                /* fine del Corano */
+      const da = ultimo + 1, a = Math.min(TOTALE_AYA, ultimo + quanti);
+      const { data, error } = await sb.from('ayat').select('*').gte('id', da).lte('id', a).order('id');
+      if (error || !data || !data.length) return 0;
+      const righe = data.map(x => ({ ...x, sura_id: x.sura, aya: x.numero, arabo: x.testo_ar }));
+      const { data: tr } = await sb.from('ayat_traduzioni').select('aya_id,testo')
+        .in('aya_id', righe.map(r => r.id)).eq('lang', 'it');
+      const mappa = {}; (tr || []).forEach(t => { mappa[t.aya_id] = t.testo; });
+      righe.forEach(r => { r.it = mappa[r.id] || ''; r.traduzione = r.it; });
+      DB.ayat = DB.ayat.concat(righe);
+      finestra.a = a; finestraSura = null;   /* non è più una sura sola */
+      return righe.length;
+    },
+    /* siamo arrivati in fondo al Libro? */
+    fineCorano: () => DB.ayat.length > 0 && DB.ayat[DB.ayat.length - 1].id >= TOTALE_AYA,
+
+    /* ricerca su TUTTO il Corano, non solo su quello in memoria.
+       Le parole si cercano nella traduzione e nel testo arabo. */
+    async cercaAyat({ sura, numero, testo, limite = 80 } = {}) {
+      let ids = null;
+      if (testo && testo.trim()) {
+        const t = testo.trim();
+        const [tr, ar] = await Promise.all([
+          sb.from('ayat_traduzioni').select('aya_id').eq('lang', 'it').ilike('testo', '%' + t + '%').limit(limite),
+          sb.from('ayat').select('id').ilike('testo_ar', '%' + t + '%').limit(limite),
+        ]);
+        ids = [...new Set([...(tr.data || []).map(x => x.aya_id), ...(ar.data || []).map(x => x.id)])];
+        if (!ids.length) return [];
+      }
+      let q = sb.from('ayat').select('*').order('id').limit(limite);
+      if (sura) q = q.eq('sura', +sura);
+      if (numero) q = q.eq('numero', +numero);
+      if (ids) q = q.in('id', ids);
+      const { data, error } = await q;
+      if (error || !data) return [];
+      const righe = data.map(x => ({ ...x, sura_id: x.sura, aya: x.numero, arabo: x.testo_ar }));
+      const { data: tr2 } = await sb.from('ayat_traduzioni').select('aya_id,testo')
+        .in('aya_id', righe.map(r => r.id)).eq('lang', 'it');
+      const mappa = {}; (tr2 || []).forEach(t => { mappa[t.aya_id] = t.testo; });
+      righe.forEach(r => { r.it = mappa[r.id] || ''; r.traduzione = r.it; });
+      return righe;
+    },
 
     /* ---- khatam ---- */
     khatamList: () => DB.khatam,
@@ -689,6 +752,7 @@ const store = (() => {
       s.piano = {
         id: p.id, inizio: p.inizio, fine: p.fine, base: p.base,
         obiettivo: daFare, obiettivoLabel: this.labelObiettivo(p.obiettivo_tipo || 'corano', p.obiettivo_n),
+        obiettivo_tipo: p.obiettivo_tipo || 'corano', obiettivo_n: p.obiettivo_n,
         fatteObiettivo: Math.max(0, tot - p.base),
         totGiorni, giorno, giorniRimasti: Math.max(0, totGiorni - giorno),
         alGiorno: Math.ceil(alGiorno), target, inizioOggi,
