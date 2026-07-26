@@ -157,6 +157,16 @@ const store = (() => {
     for (const k in filtro) q = q.eq(k, filtro[k]);
     return q.then(({ error }) => { if (error) console.error('[store] eliminazione', tabella, error.message); });
   }
+  /* Ritocca colonne di una riga che esiste già. Serve dove l'upsert non va bene:
+     le tabelle canoniche hanno colonne NOT NULL che non vogliamo rimandare tutte
+     per cambiarne una. */
+  function aggiorna(tabella, patch, filtro) {
+    let q = sb.from(tabella).update(patch);
+    for (const k in filtro) q = q.eq(k, filtro[k]);
+    const p = q.then(({ error }) => { if (error) console.error('[store] aggiornamento', tabella, error.message); });
+    inVolo.add(p); p.finally(() => inVolo.delete(p));
+    return p;
+  }
   /* `Auth` è un const di script: NON esiste come window.Auth.
      Cercarlo lì lo rendeva sempre null, e init() saltava tutti i dati personali. */
   const uid = () => (typeof Auth !== 'undefined' && Auth.id()) || null;
@@ -505,6 +515,17 @@ const store = (() => {
       const ids = DB.legami.filter(l => l.da_tipo === 'pensiero' && l.a_tipo === tipo && String(l.a_id) === String(id))
         .map(l => String(l.da_id));
       return DB.pensieri.filter(p => ids.includes(String(p.id)));
+    },
+    /* La descrizione di un Nome sta in `asma.spiegazione`: è contenuto canonico,
+       e la policy `asma_scrittura_admin` la lascia scrivere solo a chi ha
+       ruolo 'admin' in `profili`. Per gli altri il DB rifiuta: il testo resta
+       in cache fino al reload e l'errore finisce in console. */
+    setSpiegazioneAsma(numero, testo) {
+      const x = DB.asma.find(a => String(a.numero) === String(numero));
+      if (!x) return null;
+      x.spiegazione = testo || null;
+      aggiorna('asma', { spiegazione: x.spiegazione }, { numero: x.numero });
+      return x;
     },
     addPensiero(testo, ancore) {
       const p = { id: nuovoId(), user_id: uid(), testo, giorno: this.today(), stato: 'grezzo' };

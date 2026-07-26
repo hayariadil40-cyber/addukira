@@ -196,6 +196,10 @@ function setOra(id, ora) {
 function renderLettura() {
   const L = store.lettura();
   const active = store.activeKhatam();
+  /* Il segnalibro vive su khatam.aya_id come indice globale 1–6236: va confrontato
+     con quello. Su `active` non esistono sura_id/aya — chi li leggeva otteneva
+     undefined, e il segnalibro non si accendeva mai. */
+  const bmIdx = active ? (active.aya_id || 0) : 0;
   const done = store.khatamDone();
   let html = dayHeader('La lettura');
 
@@ -203,10 +207,10 @@ function renderLettura() {
   html += `<div class="khatam-panel"><div class="kh-row">
     <div class="kh-count"><div class="n">${done}</div><div class="l">khatam<br>completati</div></div>`;
   if (active) {
-    const s = suraOf(active.sura_id);
+    const s = suraOf(L.sura_id);
     html += `<div class="kh-active">
       <div class="kh-lab">Khatam #${active.numero} in corso</div>
-      <div class="kh-pos">${s ? s.translit : ''} ${s ? s.numero : ''}:${active.aya || 'inizio'} · <b>${L.pct}%</b> del Corano</div>
+      <div class="kh-pos">${s ? s.translit : ''} ${s ? s.numero : ''}:${L.aya || 'inizio'} · <b>${L.pct}%</b> del Corano</div>
       <div class="prog"><i style="width:${L.pct}%"></i></div>
       <div class="kh-btns">
         <button class="kh-b done" ${L.pct >= 100 ? '' : 'disabled'} title="${L.pct >= 100 ? 'Completa il khatam' : 'Porta il segnalibro all’ultimo versetto (114:6) per completare'}" onclick="openKhatamComplete()">✓ Completato</button>
@@ -310,7 +314,7 @@ function renderLettura() {
     <span class="chip ${modo === 'pagina' ? 'sel' : ''}" onclick="setLettore('pagina')">📖 Pagina</span>
   </div>`;
   if (modo === 'pagina') {
-    html += renderMushaf({ modo: 'lettura', attivo: active }) + bloccoContinua();
+    html += renderMushaf({ modo: 'lettura', bmIdx }) + bloccoContinua();
     $('#p-lettura').innerHTML = html; armaSentinella(); return;
   }
 
@@ -345,15 +349,15 @@ function renderLettura() {
         <span class="ss-j">juz ${store.juzDi(idx)} · ${esc(s.rivelazione || '')}</span></div>`;
       lastSura = v.sura_id;
     }
-    const isBm = active.sura_id === v.sura_id && active.aya === v.aya;
+    const isBm = bmIdx > 0 && idx === bmIdx;
     const isHl = store.isHl(v.sura_id, v.aya);
     if (isBm) html += `<div class="marker">⛿ il tuo segnalibro · ${s.numero}:${v.aya}</div>`;
     /* qui si legge e basta: contesto, accadimenti e pensieri stanno nella scheda del versetto */
     html += `<div class="aya-row ${isHl ? 'hl' : ''}"><div class="num">${v.aya}</div>
     <div class="tx"><div class="arq">${esc(v.arabo)}</div><div class="itq">${esc(v.it)}</div></div>
     <div class="act">
-      <button class="ab ${isBm ? 'on' : ''}" title="Segnalibro" onclick="store.setBookmark(${v.sura_id},${v.aya});renderLettura();toast('Segnalibro su ${s.numero}:${v.aya}')">⛿</button>
-      <button class="ab ${isHl ? 'on' : ''}" title="Evidenzia" onclick="store.toggleHl(${v.sura_id},${v.aya});renderLettura()">🖊</button>
+      <button class="ab bm ${isBm ? 'on' : ''}" aria-pressed="${isBm}" title="${isBm ? 'Il segnalibro è qui' : 'Metti il segnalibro'}" onclick="store.setBookmark(${v.sura_id},${v.aya});renderLettura();toast('Segnalibro su ${s.numero}:${v.aya}')">⛿</button>
+      <button class="ab hlb ${isHl ? 'on' : ''}" aria-pressed="${isHl}" title="${isHl ? 'Togli evidenziazione' : 'Evidenzia'}" onclick="store.toggleHl(${v.sura_id},${v.aya});renderLettura()">🖊</button>
       <button class="ab go-aya" title="Scheda del versetto — contesto, accadimenti, pensieri" onclick="apriAya(${v.sura_id},${v.aya})">⋯</button>
     </div></div>`;
   });
@@ -433,7 +437,7 @@ function renderMushaf(cfg) {
       click = `store.toggleMem(${v.sura_id},${v.aya});renderMemorizzazione()`;
       tit = `${s.numero}:${v.aya} — ${m ? 'memorizzato: tocca per togliere' : 'tocca quando lo sai'}`;
     } else {
-      const bm = cfg.attivo && cfg.attivo.sura_id === v.sura_id && cfg.attivo.aya === v.aya;
+      const bm = cfg.bmIdx > 0 && store.idxDi(s.numero, v.aya) === cfg.bmIdx;
       cls = (store.isHl(v.sura_id, v.aya) ? 'hl ' : '') + (bm ? 'bm' : '');
       click = `apriAya(${v.sura_id},${v.aya})`;
       tit = `${s.numero}:${v.aya} — apri la scheda`;
@@ -1412,6 +1416,7 @@ function renderAllah() {
 }
 function asmaCard(x) {
   return `<div class="asma-card" onclick="openAsmaDetail('${x.id}')">
+    ${x.spiegazione ? '<span class="as-note-dot" title="Ha la nota di dizionario"></span>' : ''}
     <div class="as-num">${x.numero}</div>
     <div class="as-ar">${esc(x.arabo)}</div>
     <div class="as-tr">${esc(x.translit)}</div>
@@ -1423,8 +1428,9 @@ function asmaSearch() {
   if (kw) list = list.filter(x => (x.arabo + ' ' + x.translit + ' ' + x.significato + ' ' + x.numero).toLowerCase().includes(kw));
   const box = $('#asma-list');
   const count = kw ? `<div class="qs-count">${list.length} nomi</div>` : '';
+  const conNota = list.filter(x => x.spiegazione).length;
   const note = `<div class="mz-page-head" style="margin-top:20px">I Nomi più belli
-    <span class="mz-note">bozza — 14 dei 99; i restanti in arrivo</span></div>`;
+    <span class="mz-note">${list.length} Nomi · ${conNota} con la nota di dizionario</span></div>`;
   box.innerHTML = (kw ? count : note) + (list.length
     ? `<div class="asma-grid">${list.map(asmaCard).join('')}</div>`
     : `<div class="empty">Nessun Nome trovato.</div>`);
@@ -1435,11 +1441,60 @@ function openAsmaDetail(id) {
   const pens = store.pensieriDi('asma', id);
   let h = `<div class="reader"><div class="back" onclick="nav('allah')">← Torna</div>`;
   h += `<div class="eye">Asmāʾ al-Ḥusnā · Nome ${x.numero}</div>
-    <div class="ayah" style="font-size:40px;text-align:center;padding:26px">${esc(x.arabo)}</div>
-    <h1 class="t" style="text-align:center">${esc(x.translit)}</h1>
-    <div class="trans">${esc(x.significato)}</div>
-    <h2>Pensieri nati qui</h2>${pens.map(p => `<div class="note-b"><div class="l">pensiero</div><div class="body" style="margin:0">${esc(p.testo)}</div></div>`).join('') || '<div class="empty" style="padding:14px">Nessuno ancora.</div>'}`;
+    <div class="ayah" style="font-size:40px;text-align:center;padding:26px 26px 12px">${esc(x.arabo)}</div>
+    <h1 class="as-titolo">${esc(x.translit)} <span>· ${esc(x.significato)}</span></h1>`;
+
+  /* La descrizione del Nome: `asma.spiegazione`. È contenuto canonico ma si
+     scrive da qui, perché l'archivio ha un redattore: la policy
+     `asma_scrittura_admin` lascia passare solo lui. */
+  h += `<div class="dict-head"><h2>Descrizione</h2>
+      <button class="dict-edit" onclick="asmaEditDesc('${id}')">${x.spiegazione ? '✎ Modifica' : '＋ Scrivi'}</button>
+    </div>
+    <div id="as-desc">${asmaDescBlocco(x)}</div>`;
+
+  /* I pensieri si legano al Nome come `si_riferisce_a`, non `nato_da`: il pensiero
+     non nasce dal Nome, parla dell'attributo. Si collega quando scrivi della Sua
+     misericordia, non quando citi Ar-Raḥīm. */
+  h += `<h2>Pensieri su questo Nome</h2>
+    <p class="hint">Quello che matura nel tempo su questo attributo — non dove il Nome è citato,
+      ma quando è di questo che stai parlando.</p>`;
+  h += pens.map(p => `<div class="note-b"><div class="l">${esc(p.giorno || 'pensiero')}</div>
+    <div class="body" style="margin:0">${esc(p.testo)}</div></div>`).join('')
+    || `<div class="empty" style="padding:14px">Nessuno ancora.</div>`;
+  h += `<div class="think think-b">💭<input id="as-pens" placeholder="Un pensiero su questo Nome…">
+    <button class="go" onclick="pensieroDaAsma('${id}')">Salva</button></div>`;
   h += '</div>'; $('#p-detail').innerHTML = h; show('detail');
+}
+function asmaDescBlocco(x) {
+  return x.spiegazione
+    ? `<div class="dict">${esc(x.spiegazione)}</div>`
+    : `<div class="dict vuota">Ancora nessuna descrizione. Scrivi cosa dice la radice araba,
+        che differenza porta rispetto ai Nomi vicini, dove il Corano lo usa.</div>`;
+}
+/* la descrizione si edita in posto: il riquadro diventa l'area di scrittura */
+function asmaEditDesc(id) {
+  const x = store.get('asma', id);
+  $('#as-desc').innerHTML = `<textarea class="dict-ta" id="as-desc-ta" rows="9"
+      placeholder="Radice araba e cosa dice letteralmente · che differenza porta rispetto ai Nomi vicini · dove il Corano lo usa">${esc(x.spiegazione || '')}</textarea>
+    <div class="dict-btns"><button class="btn2 salva" onclick="asmaSalvaDesc('${id}')">Salva</button>
+      <button class="btn2" onclick="asmaAnnullaDesc('${id}')">Annulla</button></div>`;
+  const ta = $('#as-desc-ta'); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+function asmaSalvaDesc(id) {
+  const t = ($('#as-desc-ta').value || '').trim();
+  store.setSpiegazioneAsma(id, t);
+  openAsmaDetail(id);
+  toast(t ? 'Descrizione salvata' : 'Descrizione svuotata');
+}
+function asmaAnnullaDesc(id) { openAsmaDetail(id); }
+
+function pensieroDaAsma(id) {
+  const t = ($('#as-pens').value || '').trim();
+  if (!t) { toast('Scrivi prima il pensiero'); return; }
+  const p = store.addPensiero(t, []);
+  store.collega('pensiero', p.id, 'asma', id, 'si_riferisce_a');
+  counts(); openAsmaDetail(id);
+  toast('Pensiero salvato · lo trovi anche in Pensieri');
 }
 
 /* ============================================================

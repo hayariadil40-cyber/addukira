@@ -287,6 +287,12 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .ab{width:30px;height:30px;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;cursor:pointer;font-size:12.5px;display:flex;align-items:center;justify-content:center;transition:.14s}
 .ab:hover{border-color:var(--brass-lite)}
 .ab.on{background:var(--brass);border-color:var(--brass);color:#fff}
+/* Segnalibro e evidenziatore usavano lo stesso .ab.on: erano indistinguibili.
+   Il segnalibro attivo ora è pieno, con anello e leggermente più grande;
+   l'evidenziatore attivo resta acceso ma tenue. */
+.ab.bm.on,.ab.bm.on:hover{background:var(--brass);border-color:#8a6d31;color:#fff;font-size:14px;
+  box-shadow:0 0 0 3px rgba(176,141,70,.32),inset 0 1px 0 rgba(255,255,255,.28);transform:scale(1.08)}
+.ab.hlb.on,.ab.hlb.on:hover{background:rgba(211,181,115,.42);border-color:var(--brass-lite);color:var(--ink)}
 .think{background:rgba(176,141,70,.09);border:1px solid rgba(176,141,70,.3);border-radius:12px;padding:11px 14px;margin:10px 0 2px;display:flex;gap:9px;align-items:center}
 .think input{flex:1;border:0;background:none;outline:0;font-family:inherit;font-size:13px;color:var(--ink)}
 .think .go{border:0;background:var(--ink);color:var(--panel);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
@@ -360,6 +366,8 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .asma-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:13px}
 .asma-card{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:18px 16px;cursor:pointer;text-align:center;position:relative;transition:.16s}
 .asma-card:hover{transform:translateY(-3px);border-color:var(--brass-lite);box-shadow:0 10px 30px rgba(22,40,31,.09)}
+/* puntino ottone: questo Nome ha già la sua nota di dizionario */
+.as-note-dot{position:absolute;top:10px;right:11px;width:6px;height:6px;border-radius:50%;background:var(--brass)}
 .as-num{position:absolute;top:10px;left:12px;font-size:11px;font-weight:600;color:var(--brass);opacity:.6}
 .as-ar{font-family:'Amiri',serif;font-size:30px;color:var(--ink);direction:rtl;line-height:1.6;margin-top:4px}
 .as-tr{font-family:'Spectral',serif;font-weight:600;font-size:16px;color:var(--brass);margin-top:6px}
@@ -447,6 +455,26 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .reader h2{font-family:'Spectral',serif;font-weight:600;font-size:18px;margin:22px 0 8px}
 .body{font-size:14.5px;line-height:1.7;margin-bottom:12px;color:#1e352a;white-space:pre-wrap}
 .src{background:rgba(63,143,95,.09);border:1px solid rgba(63,143,95,.28);border-radius:11px;padding:13px 16px;margin:16px 0;font-size:13px;color:#2c4d38}
+/* nome traslitterato e significato sulla stessa riga, sotto l'arabo */
+.as-titolo{font-family:'Spectral',serif;font-weight:600;font-size:23px;text-align:center;margin:0 0 4px}
+.as-titolo span{font-weight:400;font-size:17px;color:var(--ink-soft)}
+
+/* descrizione di una scheda canonica (oggi: un Nome di Allah): si legge nel
+   riquadro e si scrive nello stesso riquadro, che diventa area di testo */
+.dict-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.dict-edit{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-soft);cursor:pointer;
+  font-family:inherit;font-size:12px;padding:5px 11px;border-radius:8px;flex:none;transition:.14s}
+.dict-edit:hover{border-color:var(--brass-lite);color:var(--ink)}
+.dict{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--brass);
+  border-radius:0 11px 11px 0;padding:15px 18px;font-family:'Spectral',serif;font-size:14.5px;line-height:1.75;color:var(--ink)}
+.dict.vuota{font-family:'Inter',sans-serif;font-size:13px;font-style:italic;color:var(--ink-soft);border-left-color:var(--line)}
+.dict-ta{width:100%;background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--brass-lite);
+  border-radius:0 11px 11px 0;padding:15px 18px;font-family:'Spectral',serif;font-size:14.5px;line-height:1.75;
+  color:var(--ink);outline:none;resize:vertical;min-height:150px}
+.dict-ta:focus{border-left-color:var(--brass);border-color:var(--brass-lite)}
+.dict-btns{display:flex;gap:8px;margin-top:10px}
+.btn2.salva{background:var(--brass);border-color:var(--brass);color:#fff;font-weight:600}
+.hint{font-size:12px;color:var(--ink-soft);font-style:italic;margin:-2px 0 10px;line-height:1.6}
 .note-b{background:rgba(176,141,70,.1);border:1px solid rgba(176,141,70,.32);border-radius:11px;padding:14px 17px;margin:16px 0}
 .note-b .l{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--brass);font-weight:600;margin-bottom:5px}
 .links .chip::before{content:"↔ "}
