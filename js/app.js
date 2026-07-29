@@ -555,6 +555,118 @@ function ottavaPages(h, o) {
   return [ps, Math.max(ps, Math.round(s + o * span) - 1)];
 }
 
+/* ------------------------------------------------------------
+   Grafico dell'andamento. Due letture della stessa cosa:
+   'giorno'   = quanto ho fatto ogni giorno, contro la quota che il piano chiede;
+   'cumulato' = il totale accumulato, contro la retta che il piano disegna.
+   SVG scritto a mano: niente librerie, niente build.
+   ------------------------------------------------------------ */
+let mzGraf = { vista: 'giorno', giorni: 30 };
+function setMzGrafVista(v) { mzGraf.vista = v; renderMemorizzazione(); }
+function setMzGrafGiorni(g) { mzGraf.giorni = +g; renderMemorizzazione(); }
+
+function mzChart() {
+  const A = store.andamentoMem();
+  if (!A) return '';
+  const dm = g => g.slice(8, 10) + '/' + g.slice(5, 7);
+  const nv = v => v.toLocaleString('it');
+  const passati = A.giorni.filter(g => !g.futuro);
+  const tutto = !mzGraf.giorni;
+  /* nel cumulato su "tutto" si vede anche il futuro: è lì che la retta del piano arriva */
+  const vis = (mzGraf.vista === 'cumulato' && tutto) ? A.giorni
+    : (tutto ? passati : passati.slice(-mzGraf.giorni));
+  const n = vis.length;
+
+  const W = 720, H = 190, padL = 44, padR = 14, padT = 14, padB = 22;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const bw = iw / n, base = padT + ih;
+  const xc = i => padL + bw * (i + .5);
+
+  const tabs = [['giorno', 'Giorno per giorno'], ['cumulato', 'Cumulato']]
+    .map(([k, l]) => `<span class="chip ${mzGraf.vista === k ? 'sel' : ''}" onclick="setMzGrafVista('${k}')">${l}</span>`).join('');
+  const range = [[14, '14 g'], [30, '30 g'], [90, '90 g'], [0, 'tutto']]
+    .map(([g, l]) => `<span class="chip ${mzGraf.giorni === g ? 'sel' : ''}" onclick="setMzGrafGiorni(${g})">${l}</span>`).join('');
+
+  let corpo = '', legenda = '', riga = '';
+
+  if (mzGraf.vista === 'giorno') {
+    const maxN = Math.max(A.quota, ...vis.map(g => g.n || 0));
+    const yMax = Math.max(1, maxN * 1.18);
+    const y = v => padT + ih - (v / yMax) * ih;
+    const w = Math.max(1, Math.min(20, bw * .68));
+    const yq = y(A.quota);
+
+    const barre = vis.map((g, i) => {
+      const v = g.n || 0;
+      const h = v ? Math.max(1.5, base - y(v)) : 2;
+      const cls = v === 0 ? 'zero' : (v >= A.quota ? 'pieno' : '');
+      return `<rect class="barra ${cls}${g.oggi ? ' oggi' : ''}" x="${(xc(i) - w / 2).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${Math.min(2, w / 2).toFixed(1)}"><title>${dm(g.data)} — ${v} ${v === 1 ? 'versetto' : 'versetti'}${g.oggi ? ' (oggi)' : ''}</title></rect>`;
+    }).join('');
+
+    corpo = `${barre}
+      <line class="quota" x1="${padL}" y1="${yq.toFixed(1)}" x2="${W - padR}" y2="${yq.toFixed(1)}"/>
+      <text class="asse q" x="${W - padR}" y="${(yq - 5).toFixed(1)}" text-anchor="end">il piano ne chiede ${Math.ceil(A.quota)} al giorno</text>
+      <line class="base" x1="${padL}" y1="${base}" x2="${W - padR}" y2="${base}"/>
+      <text class="asse" x="${padL - 8}" y="${base + 3}" text-anchor="end">0</text>
+      <text class="asse" x="${padL - 8}" y="${padT + 8}" text-anchor="end">${Math.round(yMax)}</text>
+      <text class="asse" x="${padL}" y="${H - 5}">${dm(vis[0].data)}</text>
+      <text class="asse" x="${W - padR}" y="${H - 5}" text-anchor="end">${dm(vis[n - 1].data)}</text>`;
+
+    const somma = vis.reduce((s, g) => s + (g.n || 0), 0);
+    const attivi = vis.filter(g => g.n > 0).length;
+    const media = Math.round(somma / n * 10) / 10;
+    riga = `${attivi} giorni su ${n} con qualcosa fatto · media <b>${nv(media)}</b> al giorno contro i <b>${Math.ceil(A.quota)}</b> richiesti`;
+    legenda = `<span><i class="q pieno"></i>quota raggiunta</span><span><i class="q"></i>sotto la quota</span><span><i class="linea attesa"></i>linea del piano</span>`;
+
+  } else {
+    const yMax = Math.max(A.meta, ...vis.map(g => g.cum || 0)) * 1.02;
+    const y = v => padT + ih - (v / yMax) * ih;
+    const reali = vis.filter(g => !g.futuro);
+    const ultimo = reali[reali.length - 1];
+    const pPiano = vis.map((g, i) => `${xc(i).toFixed(1)},${y(g.piano).toFixed(1)}`).join(' ');
+    const pReale = reali.map((g, i) => `${xc(i).toFixed(1)},${y(g.cum).toFixed(1)}`).join(' ');
+    const area = `${xc(0).toFixed(1)},${base} ${pReale} ${xc(reali.length - 1).toFixed(1)},${base}`;
+    const yMeta = y(A.meta);
+
+    /* zone invisibili per il passaggio del mouse: dicono giorno per giorno come stai */
+    const hover = vis.map((g, i) => {
+      const t = g.futuro
+        ? `${dm(g.data)} — il piano dice ${nv(Math.round(g.piano))}`
+        : `${dm(g.data)} — ${nv(g.cum)} memorizzati · il piano dice ${nv(Math.round(g.piano))} (${g.cum - Math.round(g.piano) >= 0 ? '+' : ''}${nv(g.cum - Math.round(g.piano))})`;
+      return `<rect class="hover" x="${(padL + bw * i).toFixed(1)}" y="${padT}" width="${bw.toFixed(2)}" height="${ih}"><title>${t}</title></rect>`;
+    }).join('');
+
+    corpo = `<line class="meta" x1="${padL}" y1="${yMeta.toFixed(1)}" x2="${W - padR}" y2="${yMeta.toFixed(1)}"/>
+      <text class="asse q" x="${W - padR}" y="${(yMeta - 5).toFixed(1)}" text-anchor="end">obiettivo ${nv(A.meta)}</text>
+      <polygon class="area-reale" points="${area}"/>
+      <polyline class="linea-piano" points="${pPiano}"/>
+      <polyline class="linea-reale" points="${pReale}"/>
+      <circle class="punto" cx="${xc(reali.length - 1).toFixed(1)}" cy="${y(ultimo.cum).toFixed(1)}" r="3.4"/>
+      ${vis.length > reali.length ? `<line class="oggi-v" x1="${xc(reali.length - 1).toFixed(1)}" y1="${padT}" x2="${xc(reali.length - 1).toFixed(1)}" y2="${base}"/>
+        <text class="asse" x="${(xc(reali.length - 1) + 5).toFixed(1)}" y="${padT + 24}">oggi · ${dm(A.oggi)}</text>` : ''}
+      <line class="base" x1="${padL}" y1="${base}" x2="${W - padR}" y2="${base}"/>
+      <text class="asse" x="${padL - 8}" y="${base + 3}" text-anchor="end">0</text>
+      <text class="asse" x="${padL - 8}" y="${(yMeta + 3).toFixed(1)}" text-anchor="end">${nv(A.meta)}</text>
+      <text class="asse" x="${padL}" y="${H - 5}">${dm(vis[0].data)}</text>
+      <text class="asse" x="${W - padR}" y="${H - 5}" text-anchor="end">${dm(vis[n - 1].data)}</text>
+      ${hover}`;
+
+    const attesi = Math.round(ultimo.piano);
+    const scarto = ultimo.cum - attesi;
+    riga = `oggi sei a <b>${nv(ultimo.cum)}</b> versetti · il piano ne vuole <b>${nv(attesi)}</b> · <b class="${scarto >= 0 ? 'ok' : 'late'}">${scarto >= 0 ? '+' : ''}${nv(scarto)}</b>`;
+    legenda = `<span><i class="linea"></i>quello che hai fatto</span><span><i class="linea attesa"></i>linea del piano</span>`;
+  }
+
+  return `<div class="mz-graf">
+    <div class="mz-graf-h">
+      <div class="mz-graf-t">Andamento <span class="mz-graf-sub">${riga}</span></div>
+      <div class="mz-graf-tabs">${tabs}</div>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Andamento della memorizzazione">${corpo}</svg>
+    <div class="mz-graf-f"><div class="mz-graf-leg">${legenda}</div><div class="mz-graf-range">${range}</div></div>
+  </div>`;
+}
+
 function renderMemorizzazione() {
   const st = store.studio();
   const S = store.statMem();
@@ -636,6 +748,8 @@ function renderMemorizzazione() {
         <button class="kh-b del" onclick="if(confirm('Eliminare il piano? I versetti memorizzati restano.')){store.delPianoMem('${P.id}');renderMemorizzazione()}">🗑 Elimina</button>
       </div>
     </div></div></div>`;
+
+  html += mzChart();
 
   /* --- analisi statistica --- */
   html += `<div class="stat-grid">

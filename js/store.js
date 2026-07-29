@@ -756,6 +756,40 @@ const store = (() => {
       if (i >= 0) { DB.piani_mem.splice(i, 1); cancella('piani_mem', { id }); }
     },
     memDelGiorno(giorno) { return DB.memorizzato.filter(m => m.data === giorno).length; },
+    /* Andamento giorno per giorno del piano attivo: quanti versetti ho segnato ogni
+       giorno, quanti ne ho in totale, e dove la linea del piano dice che dovrei essere.
+       Copre tutto il periodo del piano, futuro compreso (là n e cum restano null). */
+    andamentoMem() {
+      const p = this.pianoMemAttivo();
+      if (!p || !p.fine) return null;
+      const GG = 86400000;
+      const gg = g => new Date(g + 'T12:00:00').getTime();
+      const iso = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+      const oggi = this.today();
+
+      const perGiorno = {};
+      DB.memorizzato.forEach(m => { if (m.data) perGiorno[m.data] = (perGiorno[m.data] || 0) + 1; });
+
+      const totGiorni = Math.max(1, Math.round((gg(p.fine) - gg(p.inizio)) / GG) + 1);
+      const daFare = Math.max(1, p.obiettivo || (TOTALE_AYA - p.base));
+      const quota = daFare / totGiorni;
+      const meta = p.base + daFare;
+
+      const giorni = [];
+      let cum = p.base;
+      for (let i = 0; i < totGiorni; i++) {
+        const g = iso(gg(p.inizio) + i * GG);
+        const futuro = g > oggi;
+        const n = futuro ? null : (perGiorno[g] || 0);
+        if (!futuro) cum += n;
+        giorni.push({
+          data: g, n, futuro, oggi: g === oggi,
+          cum: futuro ? null : cum,
+          piano: Math.min(meta, p.base + quota * (i + 1)),
+        });
+      }
+      return { giorni, quota, base: p.base, obiettivo: daFare, meta, inizio: p.inizio, fine: p.fine, oggi, totGiorni };
+    },
     statMem() {
       const tot = DB.memorizzato.length;
       const s = { tot, pctCorano: Math.round(tot / TOTALE_AYA * 1000) / 10, oggi: this.memDelGiorno(this.today()), piano: null };
