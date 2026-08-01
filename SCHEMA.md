@@ -446,6 +446,49 @@ Prezzo da pagare, dichiarato: Postgres non può imporre una foreign key su una
 colonna polimorfica. L'integrità la garantisce un trigger di validazione, non
 il motore.
 
+### I momenti sono fasce vere (migration 2026-08-01)
+
+`attivita.momento` non ha più le vecchie etichette generiche. Il vincolo è
+stato sostituito con le **fasce della giornata**, ognuna agganciata alle
+preghiere (inizio compreso, fine esclusa; la notte scavalca mezzanotte):
+
+| momento | da → a |
+|---|---|
+| `risveglio` | Fajr −20′ → Shurūq +20′ |
+| `mattino` | Shurūq +20′ → Ẓuhr |
+| `pomeriggio` | Ẓuhr → ʿAṣr |
+| `fine_giornata` | ʿAṣr → Maghrib |
+| `sera` | Maghrib → ʿIshāʾ |
+| `notte` | ʿIshāʾ → Fajr −20′ |
+| `tutto_giorno` | non è una fascia: resta valido fino al Maghrib |
+
+Le fasce vivono in `MOMENTI` dentro `store.js` (con `da`/`a` in
+{preghiera, offset}); il database conosce solo l'elenco dei valori ammessi.
+Un'attività non spuntata entro la fine della sua fascia diventa **persa**
+(`statoEff` → `auto`), senza bisogno di un orario suo.
+
+La tabella era vuota al momento della migration: nessuna conversione di dati.
+`adhkar` non ha una colonna `momento` — il momento sta sull'attività.
+
+### I tag viaggiano qui dentro (2026-08-01)
+
+Un tag è un legame `da_tipo='pensiero' → a_tipo='tag'`, dove **`a_id` è il
+testo del tag stesso** e `relazione='tag'`. Nessuna colonna nuova, nessuna
+tabella nuova: il tag diventa un nodo della rete come tutti gli altri, quindi
+domani si può appendere lo stesso tag a una scheda o a un'azione senza toccare
+lo schema. `store.tagsDi()`, `store.tuttiITag()` e `store.setTags()` sono
+scritti già generici sul `da_tipo`, non solo sui pensieri.
+
+Conseguenza voluta: **un tag esiste solo finché almeno una cosa lo porta.**
+Cancellato l'ultimo pensiero che lo usava, il tag sparisce dalla pulsantiera.
+
+Da valutare al consolidamento, non prima:
+- indice su `legami (a_tipo, a_id)` per la ricerca per tag quando i numeri
+  cresceranno;
+- se serviranno tag con un colore, una descrizione o un genitore, allora
+  servirà una tabella `tag` vera e `a_id` diventerà il suo uuid. Finché sono
+  solo parole, la tabella sarebbe peso morto.
+
 ## `attivita` — la tua routine (ex `adhkar_utente`)
 
 Nasce da un'**azione** del magazzino e diventa comportamento quotidiano.

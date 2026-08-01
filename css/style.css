@@ -55,6 +55,28 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .hijri-lat{font-family:'Spectral',serif;font-size:16px;font-weight:500;letter-spacing:.01em}
 .day-head .eye{margin-bottom:5px}
 .day-head h1.t{margin-top:6px}
+/* la giornata su due colonne: a sinistra le fasce che scorrono,
+   a destra ciò che vale tutto il giorno e resta fermo fino al Maghrib */
+.giornata{display:grid;grid-template-columns:1fr 330px;gap:26px;align-items:start}
+.col-sempre{position:sticky;top:14px}
+.col-sempre .momento{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:14px 16px 4px}
+.col-sempre .mo-t{margin-bottom:4px}
+@media(max-width:900px){.giornata{grid-template-columns:1fr}.col-sempre{position:static}}
+/* i due fili che non finiscono mai: dove sei, e un tocco per riprendere */
+.filo{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:13px 16px 15px;margin-bottom:12px;cursor:pointer;transition:.15s}
+.filo:hover{border-color:var(--brass-lite);background:rgba(176,141,70,.07)}
+.fi-t{display:flex;align-items:center;gap:10px;font-family:'Spectral',serif;font-weight:600;font-size:15px;margin-bottom:7px}
+.fi-t .ico{width:26px;height:26px;border-radius:8px;background:var(--panel);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px}
+.fi-t .st{margin-left:auto;font-size:11px;font-weight:500;color:var(--brass);font-family:inherit}
+.fi-dove{font-size:13.5px;color:var(--ink);margin-bottom:7px}
+.filo .prog{margin:0 0 6px;background:var(--panel)}
+.fi-m{font-size:11px;color:var(--ink-soft)}
+/* la fascia in corso si accende, quelle passate si spengono */
+.momento.f-ora>.mo-t{color:var(--brass)}
+.momento.f-ora>.mo-t .ico{border-color:var(--brass-lite);background:rgba(176,141,70,.12)}
+.momento.f-passato{opacity:.55}
+.momento.f-passato:hover{opacity:1}
+.mo-q{font-size:11px;color:var(--ink-soft);margin:-4px 0 10px 40px;letter-spacing:.02em}
 .momento{margin-bottom:24px}
 .mo-t{display:flex;align-items:center;gap:11px;font-family:'Spectral',serif;font-weight:600;font-size:16.5px;margin-bottom:9px}
 .mo-t .ico{width:29px;height:29px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:13px}
@@ -383,13 +405,60 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .mz-ar{flex:1;font-family:'Amiri',serif;font-size:24px;line-height:2.1;direction:rtl;text-align:right}
 
 /* ---------- pensieri ---------- */
-.add-pensiero{background:var(--panel-2);border:1px dashed var(--brass-lite);border-radius:12px;padding:14px 16px;margin:0 0 18px;color:var(--ink-soft);font-size:14px;cursor:pointer;transition:.15s}
-.add-pensiero:hover{border-style:solid;color:var(--ink);background:rgba(176,141,70,.08)}
+/* il rettangolo tratteggiato «aggiungi…»: uguale in tutte le pagine */
+.add-pensiero,.add-voce{background:var(--panel-2);border:1px dashed var(--brass-lite);border-radius:12px;padding:14px 16px;margin:0 0 18px;color:var(--ink-soft);font-size:14px;cursor:pointer;transition:.15s}
+.add-pensiero:hover,.add-voce:hover{border-style:solid;color:var(--ink);background:rgba(176,141,70,.08)}
 .pens{background:var(--panel-2);border:1px solid var(--line);border-radius:13px;padding:16px;margin-bottom:12px;transition:.15s}
 .pens:hover{border-color:var(--brass-lite)}
 .pens .anchor{font-size:11px;color:var(--brass);font-weight:600;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
-.pens .tx{font-size:14px;line-height:1.6;margin:6px 0}
+/* barra dei filtri: parola, periodo, tag */
+.pf{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-bottom:10px}
+.pf-q{flex:1 1 260px;min-width:0;border:1px solid var(--line);background:var(--panel-2);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:13.5px;color:var(--ink);outline:none}
+.pf-q:focus{border-color:var(--brass-lite)}
+.pf-per{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft)}
+.pf-per input{border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:7px 9px;font-family:inherit;font-size:12.5px;color:var(--ink);outline:none}
+.pf-per input:focus{border-color:var(--brass-lite)}
+.pf-x{border:1px solid var(--line);background:transparent;color:var(--ink-soft);border-radius:9px;padding:8px 13px;font-size:12.5px;font-family:inherit;cursor:pointer;transition:.14s}
+.pf-x:hover{border-color:var(--terra);color:var(--terra)}
+.pf-x.off{opacity:.35;pointer-events:none}
+.pf-tags{display:flex;flex-wrap:wrap;gap:0;margin-bottom:14px}
+.pf-tags.vuoti{font-size:12px;color:var(--ink-soft);margin-bottom:16px}
+.pf-conta{font-size:11.5px;color:var(--ink-soft);margin-bottom:10px}
+/* le cadenze: stessa meccanica dei tag, aspetto diverso per non confonderle */
+.pf-lab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--ink-soft);margin:2px 0 6px}
+.tg.cd{background:rgba(63,143,95,.12);border-color:rgba(63,143,95,.35);color:#2c4d38}
+.pens .tg.cd.sel,.card .tg.cd.sel{background:var(--verify);color:#fff;border-color:var(--verify)}
+/* i tag dentro una card: cliccabili, filtrano la pagina */
+.pens .tgs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+.pens .tg{font-size:11.5px;color:var(--ink-soft);background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:2px 10px;cursor:pointer;transition:.14s}
+.pens .tg:hover{border-color:var(--brass-lite);color:var(--ink)}
+.pens .tg.sel{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+/* la scheda di un tema: l'elenco di tutto ciò che gli si è agganciato */
+.tema-conto{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--brass);font-weight:600;margin:18px 0 4px}
+.tema-lista{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.tema-riga{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13.5px;color:var(--ink);cursor:pointer;transition:.14s}
+.tema-riga:hover{border-color:var(--brass-lite);background:rgba(176,141,70,.08)}
+/* i tag anche sulle card dello studio */
+.card .tgs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+.card .tg{font-size:11px;color:var(--ink-soft);background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:2px 9px}
+/* fonte + riferimento, una riga per raccolta */
+.fonte-riga{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+.fonte-riga input,.fonte-riga select{width:100%;min-width:0;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:9px 12px;font-family:inherit;font-size:13.5px;color:var(--ink);outline:none}
+.fonte-riga select{cursor:pointer}
+.fonte-riga input:focus,.fonte-riga select:focus{border-color:var(--brass-lite)}
+.fonte-riga .tb[disabled]{opacity:.3;cursor:not-allowed}
+/* la ✕ dentro un chip di tag nel modale */
+[data-tagbox] .chips .chip{align-items:center;padding-right:5px}
+[data-tagbox] .chips .pick-x{color:inherit;opacity:.6;font-size:11px;padding:1px 5px}
+[data-tagbox] .chips .pick-x:hover{opacity:1;color:inherit}
+.pens .tx{font-size:14px;line-height:1.6;margin:6px 0;white-space:pre-wrap}
 .pens .dt{font-size:11.5px;color:var(--ink-soft)}
+/* data a sinistra, modifica/elimina a destra: i tasti si accendono sulla card */
+.pens-ft{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.pens-ft .acts{display:flex;gap:6px;opacity:0;transition:.15s}
+.pens:hover .pens-ft .acts,.pens-ft .acts:focus-within{opacity:1}
+.pens-ft .tb.no:hover{border-color:var(--terra);color:var(--terra)}
+@media (hover:none){.pens-ft .acts{opacity:1}}
 
 /* ---------- Allah · Asmāʾ al-Ḥusnā ---------- */
 .lnk-allah .e{font-family:'Amiri',serif;font-size:17px;color:var(--brass-lite)}
@@ -527,6 +596,15 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .f .ar-in{font-family:'Amiri',serif;font-size:17px;direction:rtl}
 .f input:focus,.f select:focus,.f textarea:focus{border-color:var(--brass-lite)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+/* ricerca rapida dei collegamenti: si scrive il numero, non si scorre
+   una tendina lunga come tutto il Corano */
+.pick-hits{margin-top:5px;max-height:180px;overflow-y:auto}
+.pick-hit{padding:8px 11px;font-size:13px;border-radius:8px;cursor:pointer;transition:.12s;color:var(--ink-soft)}
+.pick-hit:hover{background:rgba(176,141,70,.15);color:var(--ink)}
+.pick-vuoto{padding:7px 3px;font-size:12px;color:var(--ink-soft)}
+.pick-sel{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel-2);border:1px solid var(--brass-lite);border-radius:9px;padding:8px 9px 8px 12px;font-size:13.5px;color:var(--ink);margin-bottom:6px}
+.pick-x{border:none;background:transparent;color:var(--ink-soft);font-size:13px;cursor:pointer;padding:3px 7px;border-radius:6px;font-family:inherit}
+.pick-x:hover{color:var(--terra)}
 .m-act{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
 .btn2{border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;font-weight:500;font-size:13px;padding:8px 15px;border-radius:9px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--panel);padding:10px 19px;border-radius:10px;font-size:13px;z-index:60;transition:.3s;opacity:0}

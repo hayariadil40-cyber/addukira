@@ -39,6 +39,7 @@
   <div class="lnk" data-p="lettura"><span class="e">📖</span><span data-i18n="nav.lettura">Lettura</span></div>
   <div class="lnk" data-p="memorizzazione"><span class="e">🧠</span><span data-i18n="nav.memorizzazione">Memorizzazione</span></div>
   <div class="lnk" data-p="pensieri"><span class="e">💭</span><span data-i18n="nav.pensieri">Pensieri</span> <span class="c" id="c-pens"></span></div>
+  <div class="lnk" data-p="azioni"><span class="e">🤲</span><span data-i18n="nav.azioni">Azioni</span> <span class="c" id="c-azioni"></span></div>
   <div class="grp" data-i18n="nav.group.study">Lo studio</div>
   <div class="lnk lnk-allah" data-p="allah"><span class="e">ﷲ</span><span data-i18n="nav.allah">Allah</span> <span class="c" id="c-allah"></span></div>
   <div class="lnk" data-p="quran"><span class="e">🕋</span><span data-i18n="nav.quran">Corano</span> <span class="c" id="c-quran"></span></div>
@@ -47,7 +48,6 @@
   <div class="lnk" data-p="stories"><span class="e">🏜️</span><span data-i18n="nav.stories">Storie</span> <span class="c" id="c-stories"></span></div>
   <div class="lnk" data-p="themes"><span class="e">🧵</span><span data-i18n="nav.themes">Temi</span> <span class="c" id="c-themes"></span></div>
   <div class="lnk" data-p="fiqh"><span class="e">⚖️</span><span data-i18n="nav.fiqh">Fiqh</span> <span class="c" id="c-fiqh"></span></div>
-  <div class="lnk" data-p="azioni"><span class="e">🤲</span><span data-i18n="nav.azioni">Azioni</span> <span class="c" id="c-azioni"></span></div>
   <div class="lnk" data-p="segni_ora"><span class="e">⏳</span><span data-i18n="nav.segni_ora">Segni dell'Ora</span> <span class="c" id="c-segni_ora"></span></div>
   <div class="lnk" data-p="creazione"><span class="e">🌌</span><span data-i18n="nav.creazione">La creazione</span> <span class="c" id="c-creazione"></span></div>
   <div class="lnk" data-p="luoghi"><span class="e">🕌</span><span data-i18n="nav.luoghi">Luoghi</span> <span class="c" id="c-luoghi"></span></div>
@@ -104,6 +104,10 @@
         <option value="storia">Storia</option>
         <option value="tema">Tema</option>
         <option value="fiqh">Fiqh</option>
+        <option value="azione">Azione</option>
+        <option value="segno_ora">Segno dell'Ora</option>
+        <option value="creazione">Creazione</option>
+        <option value="luogo">Luogo</option>
       </select>
     </div>
     <div id="m-fields"></div>
@@ -112,13 +116,19 @@
 </div>
 <div class="veil" id="veil-pensiero">
   <div class="modal">
-    <h2>Aggiungi un pensiero</h2>
+    <h2 id="pt-titolo">Aggiungi un pensiero</h2>
     <div class="s">Scrivilo e, se vuoi, collegalo a ciò da cui nasce.</div>
     <div class="f"><label>Il pensiero</label><textarea id="pt-testo" placeholder="Cosa hai capito, notato, sentito…"></textarea></div>
     <div class="f"><label>Collegato a <span class="lbl-hint">puoi sceglierne più di uno</span></label>
       <div class="chips" id="pt-tipi"></div>
     </div>
     <div id="pt-quali"></div>
+    <div class="f" data-tagbox="pt"><label>Tag <span class="lbl-hint">parole tue — scrivi e premi Invio</span></label>
+      <input id="pt-tag-in" class="pick-in" autocomplete="off" placeholder="misericordia, pazienza, tawḥīd…"
+        oninput="tagBoxSugg('pt')" onkeydown="tagBoxTasti('pt',event)">
+      <div class="pick-hits" id="pt-tag-sugg"></div>
+      <div class="chips" id="pt-tags"></div>
+    </div>
     <div class="m-act"><button class="btn2" id="pt-cancel">Annulla</button><button class="add" id="pt-save">Salva pensiero</button></div>
   </div>
 </div>

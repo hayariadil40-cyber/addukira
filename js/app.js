@@ -129,56 +129,111 @@ function renderOggi() {
     w.style.display = (vw.arco || vw.marea || vw.luna) ? '' : 'none';
   }
 
-  /* La mia giornata */
+  /* La mia giornata, su due colonne:
+     a sinistra le fasce, che scorrono con la giornata — quello che non fai
+     nella sua fascia è perso; a destra ciò che vale tutto il giorno e resta
+     lì fino al Maghrib. */
   const momAttivi = store.getSettings().vista.momenti;
-  let html = `<div class="hd">La mia giornata</div>`;
+  const fasce = store.momenti.filter(m => !m.sempre && momAttivi[m.k] !== false);
+  const sempre = store.momenti.find(m => m.sempre);
 
-  store.momenti.forEach(m => {
-    if (!momAttivi[m.k]) return;
-    if (m.k === 'lettura') {
-      const L = store.lettura(); const s = suraOf(L.sura_id);
-      const pos = L.attivo
-        ? `sei a ${s ? s.translit : ''} ${s ? s.numero : ''}:${L.aya || 'inizio'}`
-        : 'nessun khatam in corso';
-      html += `<div class="momento"><div class="mo-t"><span class="ico">${m.ico}</span>${m.t} <span class="st">${L.attivo ? 'riprendi' : 'inizia'}</span></div>
-      <div class="task" style="cursor:pointer" onclick="nav('lettura')"><div class="chk"></div><div class="b">
-      <div class="nm">Corano — ${pos} <span class="rep">khatam ${L.khatam} · ${L.pct}%</span></div>
-      <div class="tr">${L.attivo ? 'Tocca per riprendere da dove eri.' : 'Tocca per avviare una nuova lettura.'}</div></div></div></div>`;
-      return;
-    }
-    const items = store.attivitaOggi().filter(a => a.momento === m.k);
-    if (!items.length) return;
-    const stati = items.map(a => store.statoEff(a));
-    const done = stati.filter(s => s === 'fatto').length;
-    const skip = stati.filter(s => s === 'saltato' || s === 'auto').length;
-    const cont = `${done} di ${items.length}` + (skip ? ` · ${skip} saltat${skip === 1 ? 'a' : 'e'}` : '');
-    html += `<div class="momento"><div class="mo-t"><span class="ico">${m.ico}</span>${m.t} <span class="st">${cont}</span></div>`;
-    items.forEach((a, i) => {
-      const st = stati[i];
-      const ev = a.verso === 'evitare';
-      const cls = st === 'fatto' ? 'done' : (st ? 'skip' : '');
-      const dh = a.adhkar_id ? store.get('adhkar', a.adhkar_id) : null;   /* testo canonico */
-      const az = a.azione_id ? store.get('azioni', a.azione_id) : null;   /* da dove nasce */
-      const oraL = store.oraLabel(a);
-      html += `<div class="task ${cls} ${ev ? 'ev' : ''}">
-        <div class="b"><div class="nm">${esc(a.nome)}
-          ${ev ? '<span class="vs-ev">da evitare</span>' : ''}
-          ${a.ripetizioni ? `<span class="rep">${esc(a.ripetizioni)}</span>` : ''}
-          ${oraL ? `<span class="oral">${esc(oraL)}</span>` : ''}
-          ${st === 'auto' ? `<span class="skipped">saltata — orario passato</span>` : ''}
-          ${st === 'saltato' ? `<span class="skipped">${ev ? 'ci sono cascato' : 'saltata'}</span>` : ''}</div>
-        ${dh && dh.arabo ? `<div class="arx">${esc(dh.arabo)}</div>` : ''}
-        ${dh && dh.traduzione ? `<div class="tr">${esc(dh.traduzione)}</div>` : ''}
-        ${dh ? pillLinks(dh) : ''}
-        ${az ? `<div class="why"><span class="pill az" onclick="openStudioDetail('azioni','${az.id}')">⚖️ ${esc(az.titolo)}</span></div>` : ''}</div>
-        <div class="acts">
-          <button class="tb ok ${st === 'fatto' ? 'on' : ''}" title="${ev ? 'Non ci sono cascato' : 'Fatto'}" onclick="setAtt('${a.id}','fatto')">✓</button>
-          <button class="tb no ${st === 'saltato' || st === 'auto' ? 'on' : ''}" title="${ev ? 'Ci sono cascato' : 'Saltato'}" onclick="setAtt('${a.id}','saltato')">✕</button>
-        </div></div>`;
-    });
-    html += '</div>';
+  const sx = fasce.map(m => bloccoMomento(m)).join('');
+  /* a destra, sempre sott'occhio: ciò che vale tutto il giorno, e i due fili
+     che non finiscono mai — la lettura e la memorizzazione, con il punto in
+     cui sei e un tocco per riprendere */
+  let dx = (sempre && momAttivi[sempre.k] !== false) ? bloccoMomento(sempre) : '';
+  dx += bloccoLettura() + bloccoMemoria();
+
+  $('#oggi-giornata').innerHTML = `<div class="hd">La mia giornata</div>
+    <div class="giornata">
+      <div class="col-fasce">${sx}</div>
+      <div class="col-sempre">${dx || ''}</div>
+    </div>`;
+}
+
+/* un blocco-fascia con dentro le sue attività */
+function bloccoMomento(m) {
+  const items = store.attivitaOggi().filter(a => a.momento === m.k);
+  const stato = store.fasciaStato(m);
+  const orario = store.fasciaOrario(m);
+  if (!items.length && stato !== 'ora') return '';       /* fasce vuote: non ingombrano */
+
+  const stati = items.map(a => store.statoEff(a));
+  const done = stati.filter(s => s === 'fatto').length;
+  const persi = stati.filter(s => s === 'auto').length;
+  const cont = items.length
+    ? `${done} di ${items.length}` + (persi ? ` · ${persi} pers${persi === 1 ? 'a' : 'e'}` : '')
+    : 'niente qui';
+
+  let h = `<div class="momento f-${stato}">
+    <div class="mo-t"><span class="ico">${m.ico}</span>${m.t}
+      <span class="st">${cont}</span></div>
+    <div class="mo-q">${esc(m.q)}${orario ? ` · ${esc(orario)}` : ''}</div>`;
+
+  if (!items.length) h += `<div class="empty" style="padding:12px">Niente in questa fascia.</div>`;
+
+  items.forEach((a, i) => {
+    const st = stati[i];
+    const ev = a.verso === 'evitare';
+    const cls = st === 'fatto' ? 'done' : (st ? 'skip' : '');
+    const dh = a.adhkar_id ? store.get('adhkar', a.adhkar_id) : null;   /* testo canonico */
+    const az = a.azione_id ? store.get('azioni', a.azione_id) : null;   /* da dove nasce */
+    const oraL = store.oraLabel(a);
+    h += `<div class="task ${cls} ${ev ? 'ev' : ''}">
+      <div class="b"><div class="nm">${esc(a.nome)}
+        ${ev ? '<span class="vs-ev">da evitare</span>' : ''}
+        ${a.ripetizioni ? `<span class="rep">${esc(a.ripetizioni)}</span>` : ''}
+        ${oraL ? `<span class="oral">${esc(oraL)}</span>` : ''}
+        ${st === 'auto' ? `<span class="skipped">${m.sempre ? 'persa — è passato il Maghrib' : 'persa — la fascia è passata'}</span>` : ''}
+        ${st === 'saltato' ? `<span class="skipped">${ev ? 'ci sono cascato' : 'saltata'}</span>` : ''}</div>
+      ${dh && dh.arabo ? `<div class="arx">${esc(dh.arabo)}</div>` : ''}
+      ${dh && dh.traduzione ? `<div class="tr">${esc(dh.traduzione)}</div>` : ''}
+      ${dh ? pillLinks(dh) : ''}
+      ${az ? `<div class="why"><span class="pill az" onclick="openStudioDetail('azioni','${az.id}')">⚖️ ${esc(az.titolo)}</span></div>` : ''}</div>
+      <div class="acts">
+        <button class="tb ok ${st === 'fatto' ? 'on' : ''}" title="${ev ? 'Non ci sono cascato' : 'Fatto'}" onclick="setAtt('${a.id}','fatto')">✓</button>
+        <button class="tb no ${st === 'saltato' || st === 'auto' ? 'on' : ''}" title="${ev ? 'Ci sono cascato' : 'Saltato'}" onclick="setAtt('${a.id}','saltato')">✕</button>
+      </div></div>`;
   });
-  $('#oggi-giornata').innerHTML = html;
+  return h + '</div>';
+}
+
+/* la lettura del Corano: non è un'attività, è un filo che non finisce mai */
+function bloccoLettura() {
+  const L = store.lettura(); const s = suraOf(L.sura_id);
+  const dove = L.attivo
+    ? `${s ? s.translit + ' ' : ''}${s ? s.numero : ''}:${L.aya || 'inizio'}`
+    : 'nessun khatam in corso';
+  return `<div class="filo" onclick="nav('lettura')" title="Riprendi la lettura">
+    <div class="fi-t"><span class="ico">📖</span>Lettura
+      <span class="st">${L.attivo ? 'riprendi →' : 'inizia →'}</span></div>
+    <div class="fi-dove">${esc(dove)}</div>
+    <div class="prog"><i style="width:${L.pct}%"></i></div>
+    <div class="fi-m">${L.pct}% del Corano · khatam completati ${L.khatam}</div>
+  </div>`;
+}
+
+/* la memorizzazione: dove sei arrivato e quanto manca per oggi */
+function bloccoMemoria() {
+  const S = store.statMem();
+  const P = S.piano;
+  let dentro;
+  if (P) {
+    const resta = P.restanoOggi;
+    dentro = `<div class="fi-dove">${resta ? `${resta} versett${resta === 1 ? 'o' : 'i'} per oggi` : 'oggi sei in pari ✓'}</div>
+      <div class="prog"><i style="width:${Math.min(100, P.pctObiettivo)}%"></i></div>
+      <div class="fi-m">${P.pctObiettivo}% del piano · giorno ${P.giorno} di ${P.totGiorni}${
+        P.scarto < 0 ? ` · ${-P.scarto} indietro` : (P.scarto > 0 ? ` · ${P.scarto} avanti` : '')}</div>`;
+  } else {
+    dentro = `<div class="fi-dove">nessun piano in corso</div>
+      <div class="prog"><i style="width:${Math.min(100, S.pctCorano)}%"></i></div>
+      <div class="fi-m">${S.tot} versetti memorizzati · ${S.pctCorano}% del Corano</div>`;
+  }
+  return `<div class="filo" onclick="nav('memorizzazione')" title="Continua a memorizzare">
+    <div class="fi-t"><span class="ico">🧠</span>Memorizzazione
+      <span class="st">${P ? 'continua →' : 'apri →'}</span></div>
+    ${dentro}
+  </div>`;
 }
 
 /* segna un'attività fatta o saltata (ripremere lo stesso stato lo annulla) */
@@ -828,19 +883,60 @@ const ANCORE = {
   versetto:    { ico: '📖', l: 'Versetto',    t: 'versetti',   txt: v => { const s = suraOf(v.sura_id); return `${s ? s.translit + ' ' : ''}${s ? s.numero : ''}:${v.numero}`; }, go: id => `openDetail('versetto','${id}')` },
   sura:        { ico: '🕋', l: 'Sura',        t: 'sure',       txt: s => `Sura ${s.numero} · ${s.translit}`, go: () => `nav('quran')` },
   hadith:      { ico: '🟢', l: 'Hadith',      t: 'hadith',     txt: h => h.titolo || h.numero_rif || h.raccolta, go: id => `openDetail('hadith','${id}')` },
-  personaggio: { ico: '👤', l: 'Personaggio', t: 'personaggi', txt: p => p.nome,   go: id => `openDetail('personaggio','${id}')` },
-  tema:        { ico: '🧵', l: 'Tema',        t: 'temi',       txt: x => x.nome,   go: id => `openDetail('tema','${id}')` },
+  personaggio: { ico: '👤', l: 'Personaggio', t: 'personaggi', txt: p => p.titolo,   go: id => `openDetail('personaggio','${id}')` },
+  tema:        { ico: '🧵', l: 'Tema',        t: 'temi',       txt: x => x.titolo, go: id => `openDetail('tema','${id}')` },
+  fiqh:        { ico: '📗', l: 'Fiqh',        t: 'fiqh',       txt: x => x.titolo, go: id => `openDetail('fiqh','${id}')` },
+  segno_ora:   { ico: '⏳', l: "Segno dell'Ora", t: 'segni_ora', txt: x => x.titolo, go: id => `openDetail('segno_ora','${id}')` },
+  creazione:   { ico: '🌌', l: 'Creazione',   t: 'creazione',  txt: x => x.titolo, go: id => `openDetail('creazione','${id}')` },
+  luogo:       { ico: '🕌', l: 'Luogo',       t: 'luoghi',     txt: x => x.titolo, go: id => `openDetail('luogo','${id}')` },
   storia:      { ico: '🏜️', l: 'Storia',      t: 'storie',     txt: x => x.titolo, go: id => `openDetail('storia','${id}')` },
   azione:      { ico: '⚖️', l: 'Azione',      t: 'azioni',     txt: x => x.titolo, go: id => `openStudioDetail('azioni','${id}')` },
   asma:        { ico: 'ﷲ',  l: 'Nome di Allah', t: 'asma',    txt: x => `${x.translit} · ${x.significato}`, go: id => `openAsmaDetail('${id}')` },
 };
 
+/* Con che id si tiene in mano una riga: sure e Nomi si cercano per numero
+   (è così che `store.get` li ritrova), tutto il resto per id. */
+const ancoraKey = (k, r) => String(k === 'asma' || k === 'sura' ? r.numero : r.id);
+
+/* Etichetta di un'ancora partendo dal solo id. Per un versetto funziona
+   anche se in questo momento non è in memoria: l'id di un'aya È la sua
+   posizione nel Corano, quindi sura e numero si ricavano da lì. */
+function ancoraTesto(tipo, id) {
+  const cfg = ANCORE[tipo]; if (!cfg) return null;
+  if (tipo === 'versetto') {
+    const rec = store.get('versetti', id);
+    if (rec) return String(cfg.txt(rec) || '');
+    const p = store._ayaDaIndice(+id);
+    return `${store.nomeSura(p.sura)} ${p.sura}:${p.aya}`;
+  }
+  const rec = store.get(cfg.t, id);
+  return rec ? String(cfg.txt(rec) || '') : null;
+}
+
+/* Tag e collegamenti di una scheda qualunque, pronti da mostrare.
+   Un blocco solo: lo stesso pezzo di pagina serve personaggi, storie, temi. */
+function bloccoCollegamenti(tipo, id) {
+  const tags = store.tagsDi(id, tipo);
+  let h = tags.length ? `<div class="tgs" style="margin:4px 0 18px">${tags.map(t =>
+    `<span class="tg">#${esc(t)}</span>`).join('')}</div>` : '';
+
+  const anc = store.ancoreDiCosa(tipo, id)
+    .map(a => ({ cfg: ANCORE[a.tipo], tipo: a.tipo, target: a.target, txt: ancoraTesto(a.tipo, a.target) }))
+    .filter(a => a.cfg && a.txt);
+  h += `<h2>Collegato a</h2>`;
+  h += anc.length
+    ? `<div class="anchors" style="margin-bottom:6px">${anc.map(a =>
+        `<span class="anchor" style="cursor:pointer" onclick="${a.cfg.go(a.target)}">${a.cfg.ico} ${esc(a.txt)}</span>`).join('')}</div>`
+    : `<div class="empty" style="padding:12px">Niente ancora. Aprilo in modifica e collegalo a un hadith, a un versetto, a una storia.</div>`;
+  return h;
+}
+
 /* tutte le ancore di un pensiero, pronte da mostrare */
 function anchorLabels(p) {
   const out = store.ancoreDi(p.id).map(a => {
     const cfg = ANCORE[a.tipo]; if (!cfg) return null;
-    const rec = store.get(cfg.t, a.target); if (!rec) return null;
-    return { txt: `${cfg.ico} ${esc(String(cfg.txt(rec) || ''))}`, onclick: cfg.go(a.target) };
+    const t = ancoraTesto(a.tipo, a.target); if (!t) return null;
+    return { txt: `${cfg.ico} ${esc(t)}`, onclick: cfg.go(a.target) };
   }).filter(Boolean);
   return out.length ? out : [{ txt: '☀️ nato dalla giornata', onclick: '' }];
 }
@@ -876,62 +972,412 @@ function avviaPianoMem() {
   toast(S.piano ? `Piano avviato · ${S.piano.alGiorno} versetti al giorno` : 'Piano avviato');
 }
 
+/* la data del pensiero: in tabella è `giorno` (YYYY-MM-DD) */
+function dataPensiero(p) {
+  const g = p.giorno || p.data || '';
+  if (!/^\d{4}-\d{2}-\d{2}/.test(g)) return g;
+  try { return new Date(g.slice(0, 10) + 'T12:00:00').toLocaleDateString('it', { day: 'numeric', month: 'long', year: 'numeric' }); }
+  catch (e) { return g; }
+}
+
+/* ---- filtri della pagina: parola, periodo, tag ---- */
+let pfQ = '', pfDal = '', pfAl = '', pfTag = [];
+const pfAttivi = () => !!(pfQ.trim() || pfDal || pfAl || pfTag.length);
+
+/* Il setaccio. La parola cerca nel testo, nei tag E nelle etichette dei
+   collegamenti: così «Kahf» tira fuori anche i pensieri appesi a quella sura. */
+function pensieriFiltrati() {
+  const q = senzaSegni(pfQ).trim();
+  const cercati = pfTag.map(senzaSegni);
+  return [...store.list('pensieri')].reverse().filter(p => {
+    const g = String(p.giorno || '').slice(0, 10);
+    if (pfDal && g && g < pfDal) return false;
+    if (pfAl && g && g > pfAl) return false;
+    const tags = store.tagsDi(p.id);
+    if (cercati.length) {
+      const suoi = tags.map(senzaSegni);
+      if (!cercati.every(t => suoi.includes(t))) return false;   /* tutti, non uno qualsiasi */
+    }
+    if (q) {
+      const dove = senzaSegni([p.testo, tags.join(' '), anchorLabels(p).map(a => a.txt).join(' ')].join(' '));
+      if (!dove.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
 function renderPensieri() {
+  const tutti = store.tuttiITag();
   let html = head('Il tuo diario', 'Pensieri', 'Ogni pensiero ricorda da dove è nato. Da qui può maturare e migrare nello Studio.');
   html += `<div class="add-pensiero" onclick="openPensieroModal()">＋ Aggiungi un pensiero…</div>`;
-  const list = [...store.list('pensieri')].reverse();
+
+  html += `<div class="pf">
+    <input class="pf-q" id="pf-q" autocomplete="off" placeholder="🔍 Cerca fra i pensieri, i tag, i collegamenti…"
+      value="${esc(pfQ)}" oninput="pfSetQ(this.value)">
+    <div class="pf-per">
+      <label for="pf-dal">dal</label><input type="date" id="pf-dal" value="${esc(pfDal)}" onchange="pfSetData('dal',this.value)">
+      <label for="pf-al">al</label><input type="date" id="pf-al" value="${esc(pfAl)}" onchange="pfSetData('al',this.value)">
+    </div>
+    <button class="pf-x ${pfAttivi() ? '' : 'off'}" onclick="pfPulisci()">Pulisci</button>
+  </div>`;
+
+  html += tutti.length
+    ? `<div class="pf-tags">${tutti.map(t =>
+        `<span class="chip ${pfTag.includes(t.tag) ? 'sel' : ''}" data-tag="${esc(t.tag)}">#${esc(t.tag)}<span class="ch-n">${t.n}</span></span>`).join('')}</div>`
+    : `<div class="pf-tags vuoti">Nessun tag ancora — aggiungine scrivendo o modificando un pensiero.</div>`;
+
+  html += `<div id="pens-lista"></div>`;
+  $('#p-pensieri').innerHTML = html;
+  renderListaPensieri();
+}
+
+/* solo la lista: si ridisegna a ogni tasto senza far perdere il fuoco alla ricerca */
+function renderListaPensieri() {
+  const box = $('#pens-lista'); if (!box) return;
+  const totale = store.list('pensieri').length;
+  const list = pensieriFiltrati();
+  let html = pfAttivi()
+    ? `<div class="pf-conta">${list.length} ${list.length === 1 ? 'pensiero' : 'pensieri'} su ${totale}</div>` : '';
   html += list.map(p => {
     const anc = anchorLabels(p).map(a =>
       `<span class="anchor" ${a.onclick ? `onclick="${a.onclick}" style="cursor:pointer"` : ''}>${a.txt}</span>`).join('');
+    const tags = store.tagsDi(p.id).map(t =>
+      `<span class="tg ${pfTag.includes(t) ? 'sel' : ''}" data-tag="${esc(t)}" title="Filtra per questo tag">#${esc(t)}</span>`).join('');
     return `<div class="pens"><div class="anchors">${anc}</div>
-    <div class="tx">${esc(p.testo)}</div><div class="dt">${esc(p.data || '')}</div></div>`;
-  }).join('') || '<div class="empty">Ancora nessun pensiero — scrivine uno qui sopra.</div>';
-  $('#p-pensieri').innerHTML = html;
+    <div class="tx">${esc(p.testo)}</div>
+    ${tags ? `<div class="tgs">${tags}</div>` : ''}
+    <div class="pens-ft">
+      <span class="dt">${esc(dataPensiero(p))}</span>
+      <span class="acts">
+        <button class="tb" title="Modifica il pensiero" onclick="openPensieroEdit('${p.id}')">✎</button>
+        <button class="tb no" title="Elimina il pensiero" onclick="eliminaPensiero('${p.id}')">🗑</button>
+      </span>
+    </div></div>`;
+  }).join('') || (totale
+    ? `<div class="empty">Nessun pensiero con questi filtri.</div>`
+    : `<div class="empty">Ancora nessun pensiero — scrivine uno qui sopra.</div>`);
+  box.innerHTML = html;
 }
 
-/* ---- modale Aggiungi pensiero (con collegamento) ---- */
-/* tipi attivati nel modale: un pensiero può nascere da più cose insieme */
-let ptTipi = [];
+function pfSetQ(v) { pfQ = v; renderListaPensieri(); pfSegnaPulisci(); }
+function pfSetData(quale, v) { if (quale === 'dal') pfDal = v; else pfAl = v; renderListaPensieri(); pfSegnaPulisci(); }
+function pfSegnaPulisci() { const b = $('.pf-x'); if (b) b.classList.toggle('off', !pfAttivi()); }
+function pfPulisci() { pfQ = ''; pfDal = ''; pfAl = ''; pfTag = []; renderPensieri(); }
+
+/* clic su un tag: dalla pulsantiera o da dentro una card, è lo stesso gesto */
+function pfTagToggle(t) {
+  const i = pfTag.indexOf(t);
+  i >= 0 ? pfTag.splice(i, 1) : pfTag.push(t);
+  renderPensieri();
+}
+
+function eliminaPensiero(id) {
+  const p = store.get('pensieri', id);
+  if (!p) return;
+  if (!confirm('Eliminare questo pensiero? Spariscono anche i suoi collegamenti.')) return;
+  store.delPensiero(id);
+  counts(); renderPensieri();
+  toast('Pensiero eliminato');
+}
+
+/* ---- modale pensiero: serve sia per scriverne uno nuovo sia per correggerlo ---- */
+/* id del pensiero in modifica — null quando se ne sta scrivendo uno nuovo */
+let ptEditId = null;
+const PT_VUOTO = 'Nessun collegamento: il pensiero resterà «nato dalla giornata».';
+
+function ptModalMode(titolo, bottone) {
+  const h = $('#pt-titolo'), b = $('#pt-save');
+  if (h) h.textContent = titolo;
+  if (b) b.textContent = bottone;
+}
+
 function openPensieroModal(preset) {
+  ptEditId = null;
   $('#pt-testo').value = '';
-  ptTipi = preset ? [preset.tipo] : [];
-  renderPensieroLinks(preset);
+  linkBoxInit('pt', preset ? [{ tipo: preset.tipo, id: preset.id }] : [], { vuoto: PT_VUOTO });
+  tagBoxInit('pt', []);
+  ptModalMode('Aggiungi un pensiero', 'Salva pensiero');
   $('#veil-pensiero').classList.add('on');
 }
-function closePensieroModal() { $('#veil-pensiero').classList.remove('on'); ptTipi = []; }
 
-function ptToggleTipo(t) {
-  const i = ptTipi.indexOf(t);
-  i >= 0 ? ptTipi.splice(i, 1) : ptTipi.push(t);
-  renderPensieroLinks();
+/* stesso modale, riempito con quello che c'è già */
+function openPensieroEdit(id) {
+  const p = store.get('pensieri', id);
+  if (!p) { toast('Pensiero non trovato'); return; }
+  ptEditId = p.id;
+  $('#pt-testo').value = p.testo || '';
+  linkBoxInit('pt', store.ancoreDi(p.id).map(a => ({ tipo: a.tipo, id: a.target })), { vuoto: PT_VUOTO });
+  tagBoxInit('pt', store.tagsDi(p.id));
+  ptModalMode('Modifica il pensiero', 'Salva le modifiche');
+  $('#veil-pensiero').classList.add('on');
 }
 
-/* i chip dei tipi + un selettore "quale" per ogni tipo acceso */
-function renderPensieroLinks(preset) {
-  $('#pt-tipi').innerHTML = Object.entries(ANCORE).map(([k, c]) =>
-    `<span class="chip ${ptTipi.includes(k) ? 'sel' : ''}" onclick="ptToggleTipo('${k}')">${c.ico} ${esc(c.l)}</span>`).join('');
+function closePensieroModal() {
+  $('#veil-pensiero').classList.remove('on');
+  ptEditId = null;
+  linkBoxInit('pt', [], { vuoto: PT_VUOTO });
+  tagBoxInit('pt', []);
+}
 
-  $('#pt-quali').innerHTML = ptTipi.map(k => {
+/* ---- i tag dentro il modale ---- */
+/* ============================================================
+   CASELLA DEI TAG — una sola implementazione, riusabile.
+   Ogni modale che ne vuole una dichiara un prefisso: il blocco HTML
+   ha `data-tagbox="<pre>"` e dentro gli id `<pre>-tag-in`,
+   `<pre>-tag-sugg`, `<pre>-tags`. I tag scelti vivono in TAGBOX[pre].
+   ============================================================ */
+const TAGBOX = {};
+/* su quale elenco pesca ogni casella: le cadenze non si mescolano ai tag */
+const TAGBOX_TIPO = { pt: 'tag', m: 'tag', mc: 'cadenza' };
+const tagBoxQuale = pre => TAGBOX_TIPO[pre] || 'tag';
+
+function tagBoxInit(pre, tags) {
+  TAGBOX[pre] = (tags || []).slice();
+  const i = $('#' + pre + '-tag-in'); if (i) i.value = '';
+  const s = $('#' + pre + '-tag-sugg'); if (s) s.innerHTML = '';
+  tagBoxRender(pre);
+}
+
+function tagBoxRender(pre) {
+  const box = $('#' + pre + '-tags'); if (!box) return;
+  const seg = tagBoxQuale(pre) === 'cadenza' ? '⏱ ' : '#';
+  box.innerHTML = (TAGBOX[pre] || []).map(t =>
+    `<span class="chip sel">${seg}${esc(t)}<button class="pick-x" data-tagx="${esc(t)}" title="Togli">✕</button></span>`).join('');
+}
+
+function tagBoxAdd(pre, t) {
+  const v = String(t || '').trim().replace(/^#/, '');
+  if (!v) return;
+  TAGBOX[pre] = TAGBOX[pre] || [];
+  /* stesso tag scritto diverso resta lo stesso tag: si tiene la forma già in uso */
+  const esistente = store.tuttiITag(tagBoxQuale(pre)).find(x => senzaSegni(x.tag) === senzaSegni(v));
+  const finale = esistente ? esistente.tag : v;
+  if (!TAGBOX[pre].some(x => senzaSegni(x) === senzaSegni(finale))) TAGBOX[pre].push(finale);
+  const i = $('#' + pre + '-tag-in'); if (i) i.value = '';
+  const s = $('#' + pre + '-tag-sugg'); if (s) s.innerHTML = '';
+  tagBoxRender(pre);
+}
+
+function tagBoxDel(pre, t) {
+  TAGBOX[pre] = (TAGBOX[pre] || []).filter(x => x !== t);
+  tagBoxRender(pre);
+}
+
+/* suggerisce i tag che usi già, per non moltiplicare le varianti */
+function tagBoxSugg(pre) {
+  const el = $('#' + pre + '-tag-in'), box = $('#' + pre + '-tag-sugg');
+  if (!el || !box) return;
+  const q = senzaSegni(el.value).trim();
+  if (!q) { box.innerHTML = ''; return; }
+  const scelti = TAGBOX[pre] || [];
+  const hit = store.tuttiITag(tagBoxQuale(pre))
+    .filter(x => senzaSegni(x.tag).includes(q) && !scelti.some(y => senzaSegni(y) === senzaSegni(x.tag)))
+    .slice(0, 6);
+  const seg = tagBoxQuale(pre) === 'cadenza' ? '⏱ ' : '#';
+  box.innerHTML = hit.map(x =>
+    `<div class="pick-hit" data-tagadd="${esc(x.tag)}">${seg}${esc(x.tag)} <span class="ch-n">${x.n}</span></div>`).join('');
+}
+
+function tagBoxTasti(pre, e) {
+  /* Invio prende ciò che hai scritto, non il suggerimento: i suggerimenti
+     si prendono cliccandoli, così non ti ritrovi un tag che non volevi */
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    tagBoxAdd(pre, e.target.value);
+    return;
+  }
+  /* cancellando a campo vuoto si toglie l'ultimo tag, come nelle caselle mail */
+  if (e.key === 'Backspace' && !e.target.value && (TAGBOX[pre] || []).length) {
+    TAGBOX[pre].pop(); tagBoxRender(pre);
+  }
+}
+
+/* i tag da salvare, compreso quello scritto e non ancora confermato con Invio */
+function tagBoxValori(pre) {
+  const el = $('#' + pre + '-tag-in');
+  if (el && el.value.trim()) tagBoxAdd(pre, el.value);
+  return (TAGBOX[pre] || []).slice();
+}
+
+/* ============================================================
+   CASELLA DEI COLLEGAMENTI — una sola implementazione, riusabile.
+   Come per i tag: ogni modale dichiara un prefisso e ha i suoi
+   contenitori `<pre>-tipi` e `<pre>-quali`. Lo stato vive qui, non
+   nel DOM, così ridisegnare non cancella le scelte già fatte.
+   ============================================================ */
+const LINKBOX = {};
+
+/* `scelte` tiene una LISTA per tipo: in un hadith i personaggi coinvolti
+   sono spesso più d'uno — chi lo riporta, chi compare nel racconto. */
+function linkBoxInit(pre, ancore, opz) {
+  const st = LINKBOX[pre] = { tipi: [], scelte: {}, escludi: (opz && opz.escludi) || [], vuoto: (opz && opz.vuoto) || '' };
+  (ancore || []).forEach(a => {
+    if (!ANCORE[a.tipo] || st.escludi.includes(a.tipo)) return;
+    if (!st.tipi.includes(a.tipo)) st.tipi.push(a.tipo);
+    st.scelte[a.tipo] = st.scelte[a.tipo] || [];
+    if (!st.scelte[a.tipo].includes(String(a.id))) st.scelte[a.tipo].push(String(a.id));
+  });
+  linkBoxRender(pre);
+}
+const linkScelti = (pre, k) => (LINKBOX[pre] && LINKBOX[pre].scelte[k]) || [];
+
+function linkBoxRender(pre) {
+  const st = LINKBOX[pre]; if (!st) return;
+  const chips = $('#' + pre + '-tipi'), quali = $('#' + pre + '-quali');
+  if (!chips || !quali) return;
+  chips.innerHTML = Object.entries(ANCORE).filter(([k]) => !st.escludi.includes(k)).map(([k, c]) =>
+    `<span class="chip ${st.tipi.includes(k) ? 'sel' : ''}" onclick="linkToggleTipo('${pre}','${k}')">${c.ico} ${esc(c.l)}</span>`).join('');
+
+  quali.innerHTML = st.tipi.map(k => {
     const c = ANCORE[k];
-    const righe = store.list(c.t) || [];
-    const pre = preset && preset.tipo === k ? String(preset.id) : '';
-    return `<div class="f"><label>${c.ico} Quale ${esc(c.l.toLowerCase())}</label>
-      <select id="pt-q-${k}">
-        <option value="">—</option>
-        ${righe.map(r => `<option value="${r.id}" ${String(r.id) === pre ? 'selected' : ''}>${esc(String(c.txt(r) || ''))}</option>`).join('')}
-      </select></div>`;
-  }).join('') || `<div class="set-info">Nessun collegamento: il pensiero resterà «nato dalla giornata».</div>`;
+    const n = linkScelti(pre, k).length;
+    return `<div class="f"><label>${c.ico} Quale ${esc(c.l.toLowerCase())}${n > 1 ? ` <span class="lbl-hint">${n} scelti</span>` : ''}</label>
+      <div class="pick">${linkPickHtml(pre, k)}</div></div>`;
+  }).join('') || (st.vuoto ? `<div class="set-info">${st.vuoto}</div>` : '');
+
+  /* i risultati di partenza, senza dover scrivere niente */
+  st.tipi.forEach(k => linkCerca(pre, k));
+}
+
+function linkToggleTipo(pre, t) {
+  const st = LINKBOX[pre]; if (!st) return;
+  const i = st.tipi.indexOf(t);
+  if (i >= 0) { st.tipi.splice(i, 1); delete st.scelte[t]; } else st.tipi.push(t);
+  linkBoxRender(pre);
+  /* appena acceso un tipo, il cursore è già nella sua casella di ricerca */
+  const el = document.getElementById(pre + '-s-' + t);
+  if (el) el.focus();
+}
+
+/* cosa suggerire di scrivere, tipo per tipo */
+const LINK_HINT = {
+  versetto: 'Scrivi il numero: 2:255 — oppure una parola',
+  sura:     'Numero o nome della sura: 18, Kahf…',
+  asma:     'Numero o nome: 1, ar-Raḥmān…',
+};
+const linkHint = k => LINK_HINT[k] || 'Scrivi per cercare…';
+
+/* le scelte già fatte, e sotto la ricerca che resta aperta per aggiungerne altre */
+function linkPickHtml(pre, k) {
+  const scelti = linkScelti(pre, k);
+  const pillole = scelti.map(id => `<div class="pick-sel"><span>${esc(ancoraTesto(k, id) || '—')}</span>
+    <button class="pick-x" title="Togli questa scelta" onclick="linkPulisci('${pre}','${k}','${esc(String(id))}')">✕</button></div>`).join('');
+  const cerca = `<input class="pick-in" id="${pre}-s-${k}" autocomplete="off"
+      placeholder="${esc(scelti.length ? 'Aggiungine un altro…' : linkHint(k))}"
+      oninput="linkCerca('${pre}','${k}')" onkeydown="linkTasti(event,'${pre}','${k}')">
+    <div class="pick-hits" id="${pre}-r-${k}"></div>`;
+  return pillole + cerca;
+}
+
+function linkCerca(pre, k) {
+  const el = document.getElementById(pre + '-s-' + k);
+  const box = document.getElementById(pre + '-r-' + k);
+  if (!box) return;
+  const q = el ? el.value : '';
+  if (k === 'versetto' && !q.trim()) {
+    box.innerHTML = `<div class="pick-vuoto">Scrivi il numero del versetto — per esempio 2:255</div>`;
+    return;
+  }
+  /* chi è già stato scelto non ricompare fra i risultati */
+  const gia = linkScelti(pre, k);
+  const res = linkRisultati(k, q).filter(r => !gia.includes(String(r.id)));
+  box.innerHTML = res.length
+    ? res.map(r => `<div class="pick-hit" onclick="linkScegli('${pre}','${k}','${esc(String(r.id))}')">${esc(r.label)}</div>`).join('')
+    : `<div class="pick-vuoto">${gia.length ? 'Nient’altro da aggiungere' : 'Nessun risultato'}</div>`;
+}
+
+function linkScegli(pre, k, id) {
+  const st = LINKBOX[pre];
+  st.scelte[k] = st.scelte[k] || [];
+  if (!st.scelte[k].includes(String(id))) st.scelte[k].push(String(id));
+  linkBoxRender(pre);
+  const el = document.getElementById(pre + '-s-' + k);
+  if (el) el.focus();                 /* pronto per il prossimo, senza altri clic */
+}
+
+function linkPulisci(pre, k, id) {
+  const st = LINKBOX[pre];
+  st.scelte[k] = linkScelti(pre, k).filter(x => x !== String(id));
+  linkBoxRender(pre);
+  const el = document.getElementById(pre + '-s-' + k);
+  if (el) el.focus();
+}
+
+/* Invio prende il primo risultato: cerchi «2:255», premi Invio, fatto */
+function linkTasti(e, pre, k) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const primo = document.querySelector('#' + pre + '-r-' + k + ' .pick-hit');
+  if (primo) primo.click();
+}
+
+/* i collegamenti da salvare, tutti: un tipo acceso senza scelte non conta */
+function linkValori(pre) {
+  const st = LINKBOX[pre]; if (!st) return [];
+  return st.tipi.flatMap(k => linkScelti(pre, k).map(id => ({ tipo: k, id })));
+}
+
+/* Cercare «khamisa» deve trovare «khamīṣa»: i segni sulle vocali e le due
+   lettere ʿayn/hamza si tolgono da entrambe le parti prima di confrontare.
+   Vale anche per l'arabo, dove leva le vocali brevi. */
+const senzaSegni = s => String(s || '').normalize('NFD')
+  .replace(/[\u0300-\u036f\u0610-\u061a\u064b-\u065f\u0670]/g, '')
+  .replace(/[\u02bb\u02bc\u02be\u02bf\u2018\u2019']/g, '')
+  .toLowerCase();
+
+/* La ricerca. Il numero è la via maestra — le liste sono troppo lunghe
+   per scorrerle, e per un versetto il numero si sa sempre a memoria. */
+function linkRisultati(k, q) {
+  q = senzaSegni(q).trim();
+  const c = ANCORE[k];
+  const out = [];
+  if (k === 'versetto') {
+    /* «2:255», «2 255», «2.255» → quel versetto esatto, caricato o no */
+    const m = q.match(/^(\d{1,3})\s*[:.\s-]\s*(\d{1,3})$/);
+    if (m) {
+      const s = +m[1], a = +m[2];
+      if (s >= 1 && s <= 114 && a >= 1 && a <= store.vvSura(s))
+        out.push({ id: store.idxDi(s, a), label: `${store.nomeSura(s)} ${s}:${a}` });
+      return out;
+    }
+    /* solo il numero della sura → i suoi primi versetti, per scegliere al volo */
+    if (/^\d{1,3}$/.test(q)) {
+      const s = +q;
+      if (s >= 1 && s <= 114)
+        for (let a = 1; a <= Math.min(8, store.vvSura(s)); a++)
+          out.push({ id: store.idxDi(s, a), label: `${store.nomeSura(s)} ${s}:${a}` });
+      return out;
+    }
+    /* parole: si cercano fra i versetti aperti nel lettore */
+    if (q.length >= 2) store.list('versetti').forEach(v => {
+      if (out.length >= 8) return;
+      if (senzaSegni((v.traduzione || '') + ' ' + (v.arabo || '')).includes(q))
+        out.push({ id: v.id, label: String(c.txt(v) || '') });
+    });
+    return out;
+  }
+  (store.list(c.t) || []).forEach(r => {
+    if (out.length >= 8) return;
+    const label = String(c.txt(r) || '');
+    const dove = senzaSegni([label, r.numero, r.nome, r.nome_arabo, r.titolo, r.testo,
+      r.translit, r.significato, r.raccolta, r.numero_rif].filter(Boolean).join(' '));
+    if (!q || dove.includes(q)) out.push({ id: ancoraKey(k, r), label });
+  });
+  return out;
 }
 
 function savePensiero() {
   const txt = $('#pt-testo').value.trim();
   if (!txt) { toast('Scrivi il pensiero'); return; }
-  /* una riga di legami per ogni tipo acceso e valorizzato */
-  const ancore = ptTipi.map(k => {
-    const el = document.getElementById('pt-q-' + k);
-    return el && el.value ? { tipo: k, id: el.value } : null;
-  }).filter(Boolean);
-  store.addPensiero(txt, ancore);
+  const ancore = linkValori('pt');
+  const tags = tagBoxValori('pt');
+  if (ptEditId) {
+    store.editPensiero(ptEditId, txt, ancore, tags);
+    closePensieroModal(); counts(); renderPensieri();
+    toast('Pensiero aggiornato ✓');
+    return;
+  }
+  store.addPensiero(txt, ancore, tags);
   closePensieroModal(); counts(); renderPensieri();
   toast(ancore.length > 1 ? `Pensiero salvato · ${ancore.length} collegamenti ✓` : 'Pensiero salvato ✓');
 }
@@ -940,11 +1386,207 @@ function savePensiero() {
    STUDIO — card e pagine
    ============================================================ */
 const vCard = v => { const s = suraOf(v.sura_id); return `<div class="card" onclick="apriAya(${v.sura_id},${v.aya})"><span class="k">${s ? s.numero + ' · ' + s.translit : ''} : ${v.numero}</span><div class="arh">${esc(v.arabo)}</div><p>${esc(v.traduzione)}</p></div>`; };
-const hCard = h => `<div class="card" onclick="openDetail('hadith','${h.id}')"><span class="k">${esc(h.numero_rif || h.raccolta)}</span><h3>${esc(h.testo.slice(0, 50))}${h.testo.length > 50 ? '…' : ''}</h3><p>${esc(h.nota || h.isnad)}</p><div class="ft"><span class="dot ${h.grado === 'sahih' ? '' : 'h'}">${GRADO[h.grado]}</span></div></div>`;
-const pCard = p => `<div class="card" onclick="openDetail('personaggio','${p.id}')"><span class="k">${CAT[p.categoria]}</span><h3>${esc(p.nome)}</h3><div class="arh">${esc(p.nome_arabo || '')}</div><p>${esc(p.biografia || '')}</p></div>`;
-const sCard = s => { const su = suraOf(s.sura_id); return `<div class="card" onclick="openDetail('storia','${s.id}')"><span class="k">${su ? 'Sura ' + su.numero : ''}</span><h3>${esc(s.titolo)}</h3><p>${esc(s.riassunto || '')}</p></div>`; };
-const tCard = t => `<div class="card" onclick="openDetail('tema','${t.id}')"><span class="k">Tema</span><h3>${esc(t.nome)}</h3><div class="arh">${esc(t.nome_arabo || '')}</div><p>${esc(t.descrizione || '')}</p></div>`;
-const fCard = f => `<div class="card" onclick="openDetail('fiqh','${f.id}')"><span class="k">${esc(f.categoria)}</span><h3>${esc(f.titolo)}</h3><p>${esc(f.contenuto || '')}</p></div>`;
+/* se l'hadith ha un titolo è quello a fare da intestazione, e sotto va il
+   testo: il titolo è il modo in cui te lo richiami, cercarlo altrove è inutile */
+const hCard = h => {
+  const taglia = (s, n) => esc(String(s || '').slice(0, n)) + (String(s || '').length > n ? '…' : '');
+  const tags = store.tagsDi(h.id, 'hadith');
+  return `<div class="card" onclick="openDetail('hadith','${h.id}')">
+    <span class="k">${esc(h.numero_rif || h.raccolta)}</span>
+    <h3>${h.titolo ? esc(h.titolo) : taglia(h.testo, 50)}</h3>
+    <p>${h.titolo ? taglia(h.testo, 100) : esc(h.nota || h.isnad)}</p>
+    ${tags.length ? `<div class="tgs">${tags.map(t => `<span class="tg">#${esc(t)}</span>`).join('')}</div>` : ''}
+    <div class="ft"><span class="dot ${h.grado === 'sahih' ? '' : 'h'}">${GRADO[h.grado]}</span></div></div>`;
+};
+const pCard = p => {
+  const tags = store.tagsDi(p.id, 'personaggio');
+  return `<div class="card" onclick="openDetail('personaggio','${p.id}')">
+    <span class="k">${CAT[p.categoria] || esc(p.categoria || '')}</span>
+    <h3>${esc(p.titolo)}</h3>
+    ${p.arabo ? `<div class="arh">${esc(p.arabo)}</div>` : ''}
+    <p>${esc(p.sommario || p.corpo || '')}</p>
+    ${tags.length ? `<div class="tgs">${tags.map(t => `<span class="tg">#${esc(t)}</span>`).join('')}</div>` : ''}</div>`;
+};
+const sCard = s => {
+  const tags = store.tagsDi(s.id, 'storia');
+  const testo = String(s.corpo || '');
+  return `<div class="card" onclick="openDetail('storia','${s.id}')">
+    <span class="k">${esc(s.riferimento || 'Racconto')}</span>
+    <h3>${esc(s.titolo)}</h3>
+    <p>${esc(testo.slice(0, 140))}${testo.length > 140 ? '…' : ''}</p>
+    ${tags.length ? `<div class="tgs">${tags.map(t => `<span class="tg">#${esc(t)}</span>`).join('')}</div>` : ''}</div>`;
+};
+const pesoStoria = s => senzaSegni([s.titolo, s.corpo, s.riferimento,
+  store.tagsDi(s.id, 'storia').join(' ')].filter(Boolean).join(' '));
+
+/* ---- pagina Storie: aggiungi, cerca, filtra per tag ---- */
+let stKw = '', stTag = [];
+function stSet(v) { stKw = v; storieSearch(); }
+function stTagToggle(t) {
+  const i = stTag.indexOf(t);
+  i >= 0 ? stTag.splice(i, 1) : stTag.push(t);
+  renderStories();
+}
+function storieClear() { stKw = ''; stTag = []; renderStories(); }
+
+function renderStories() {
+  let html = head('Storie · القصص', 'Racconti', 'I grandi racconti, con dentro chi li vive e da dove vengono.');
+  html += `<div class="add-voce" onclick="openModalTipo('storia')">＋ Aggiungi una storia…</div>`;
+  html += `<div class="quran-search"><div class="qs-grid qs-grid-1">
+      <div class="qs-field qs-kw"><label>Parole chiave</label>
+        <input id="st-kw" placeholder="Titolo, racconto, fonte, tag…" value="${esc(stKw)}" oninput="stSet(this.value)"></div>
+      <button class="qs-clear" onclick="storieClear()" title="Azzera">✕</button>
+    </div></div>`;
+
+  const conta = new Map();
+  store.list('storie').forEach(s => store.tagsDi(s.id, 'storia')
+    .forEach(t => conta.set(t, (conta.get(t) || 0) + 1)));
+  if (conta.size) html += `<div class="pf-tags">${[...conta.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'it'))
+    .map(([t, n]) => `<span class="chip ${stTag.includes(t) ? 'sel' : ''}" data-stag="${esc(t)}">#${esc(t)}<span class="ch-n">${n}</span></span>`).join('')}</div>`;
+
+  html += `<div id="st-list"></div>`;
+  $('#p-stories').innerHTML = html;
+  storieSearch();
+}
+
+function storieSearch() {
+  const q = senzaSegni(stKw).trim();
+  let list = store.list('storie');
+  if (q) list = list.filter(s => pesoStoria(s).includes(q));
+  if (stTag.length) list = list.filter(s => {
+    const suoi = store.tagsDi(s.id, 'storia').map(senzaSegni);
+    return stTag.map(senzaSegni).every(t => suoi.includes(t));
+  });
+  const box = $('#st-list');
+  const conta = (q || stTag.length) ? `<div class="qs-count">${list.length} storie</div>` : '';
+  box.innerHTML = conta + (list.length
+    ? `<div class="grid">${list.map(sCard).join('')}</div>`
+    : `<div class="empty">${store.list('storie').length
+        ? 'Nessuna storia con questi filtri.' : 'Nessuna storia ancora — aggiungine una qui sopra.'}</div>`);
+}
+/* ============================================================
+   SCHEDE-RACCOLTA — Temi e, per ora, Fiqh.
+   Stessa forma: si scrivono una volta (nome + concetto) e poi si
+   riempiono da sole, perché sono le altre schede ad agganciarsi a loro.
+   ============================================================ */
+const RACCOLTA_CFG = {
+  tema: { lista: 'temi', box: 'tm', dom: 'p-themes',
+    eye: 'Temi · المواضيع', titolo: 'I fili',
+    sub: 'Scrivi il tema una volta. Da lì in poi, tutto ciò che lo riguarda si aggancia da solo e resta qui.',
+    aggiungi: '＋ Crea un nuovo tema…', cerca: 'Nome del tema o concetto…',
+    vuota: 'Nessun tema ancora. Creane uno: ṣabr, matrimonio, sincerità…',
+    niente: 'Nessun tema con questa ricerca.' },
+  fiqh: { lista: 'fiqh', box: 'fq', dom: 'p-fiqh',
+    eye: 'Fiqh · الفقه', titolo: 'Regole e scuole',
+    sub: 'Un argomento per volta. Poi ogni hadith, versetto o pensiero che lo riguarda si aggancia qui.',
+    aggiungi: '＋ Crea un nuovo argomento…', cerca: 'Argomento o concetto…',
+    vuota: 'Nessun argomento ancora. Creane uno: ṭahāra, wuḍūʾ, zakāt…',
+    niente: 'Nessun argomento con questa ricerca.' },
+  segno_ora: { lista: 'segni_ora', box: 'so', dom: 'p-segni_ora',
+    eye: "Segni dell'Ora · علامات الساعة", titolo: "I segni dell'Ora",
+    sub: 'Un segno per volta. Poi tutto ciò che lo riguarda — hadith, versetti, pensieri — si raccoglie qui.',
+    aggiungi: '＋ Crea un nuovo segno…', cerca: 'Segno o descrizione…',
+    vuota: "Nessun segno ancora. Creane uno: il fumo, il sole da occidente, il Dajjāl…",
+    niente: 'Nessun segno con questa ricerca.' },
+  creazione: { lista: 'creazione', box: 'cr', dom: 'p-creazione',
+    eye: 'La creazione · الخلق', titolo: 'La creazione',
+    sub: 'Il cosmo, gli esseri, gli ordini del creato. Scrivi la voce, poi si riempie da sola.',
+    aggiungi: '＋ Crea una nuova voce…', cerca: 'Voce o descrizione…',
+    vuota: 'Nessuna voce ancora. Creane una: gli angeli, il Trono, i sette cieli…',
+    niente: 'Nessuna voce con questa ricerca.' },
+  luogo: { lista: 'luoghi', box: 'lg', dom: 'p-luoghi',
+    eye: 'Luoghi · الأماكن', titolo: 'I luoghi',
+    sub: 'Luoghi sacri e dell’aldilà. Scrivi il luogo, poi tutto ciò che vi accade si raccoglie qui.',
+    aggiungi: '＋ Crea un nuovo luogo…', cerca: 'Luogo o descrizione…',
+    vuota: 'Nessun luogo ancora. Creane uno: la Kaʿba, al-Aqṣā, il Paradiso…',
+    niente: 'Nessun luogo con questa ricerca.' },
+};
+
+/* quante cose si sono agganciate, nel tempo */
+const pesoRaccolta = (tipo, x) => store.ancoreDiCosa(tipo, x.id).filter(a => ANCORE[a.tipo]).length
+  + store.pensieriDi(tipo, x.id).length;
+
+function raccoltaCard(tipo, x) {
+  const n = pesoRaccolta(tipo, x);
+  const d = String(x.corpo || '');
+  return `<div class="card" onclick="openDetail('${tipo}','${x.id}')">
+    <span class="k">${n ? n + (n === 1 ? ' collegamento' : ' collegamenti') : 'ancora vuoto'}</span>
+    <h3>${esc(x.titolo)}</h3>
+    <p>${esc(d.slice(0, 150))}${d.length > 150 ? '…' : ''}</p></div>`;
+}
+const tCard = t => raccoltaCard('tema', t);
+const fCard = f => raccoltaCard('fiqh', f);
+
+const raccoltaKw = {};
+function raccoltaSet(tipo, v) { raccoltaKw[tipo] = v; raccoltaSearch(tipo); }
+function raccoltaClear(tipo) { raccoltaKw[tipo] = ''; renderRaccolta(tipo); }
+
+function renderRaccolta(tipo) {
+  const cfg = RACCOLTA_CFG[tipo];
+  const kw = raccoltaKw[tipo] || '';
+  let html = head(cfg.eye, cfg.titolo, cfg.sub);
+  html += `<div class="add-voce" onclick="openModalTipo('${tipo}')">${cfg.aggiungi}</div>`;
+  html += `<div class="quran-search"><div class="qs-grid qs-grid-1">
+      <div class="qs-field qs-kw"><label>Parole chiave</label>
+        <input id="${cfg.box}-kw" placeholder="${esc(cfg.cerca)}" value="${esc(kw)}" oninput="raccoltaSet('${tipo}',this.value)"></div>
+      <button class="qs-clear" onclick="raccoltaClear('${tipo}')" title="Azzera">✕</button>
+    </div></div>
+  <div id="${cfg.box}-list"></div>`;
+  $('#' + cfg.dom).innerHTML = html;
+  raccoltaSearch(tipo);
+}
+
+function raccoltaSearch(tipo) {
+  const cfg = RACCOLTA_CFG[tipo];
+  const q = senzaSegni(raccoltaKw[tipo] || '').trim();
+  let list = store.list(cfg.lista);
+  if (q) list = list.filter(x => senzaSegni([x.titolo, x.corpo].filter(Boolean).join(' ')).includes(q));
+  /* i più pieni davanti: sono quelli su cui stai davvero lavorando */
+  list = [...list].sort((a, b) => pesoRaccolta(tipo, b) - pesoRaccolta(tipo, a)
+    || String(a.titolo).localeCompare(String(b.titolo), 'it'));
+  $('#' + cfg.box + '-list').innerHTML = list.length
+    ? `<div class="grid">${list.map(x => raccoltaCard(tipo, x)).join('')}</div>`
+    : `<div class="empty">${store.list(cfg.lista).length ? cfg.niente : cfg.vuota}</div>`;
+}
+
+/* Il cuore delle schede-raccolta (Temi, Fiqh): tutto ciò che nel tempo si è
+   agganciato, raccolto per genere. Non si aggiunge niente da qui — arriva da
+   solo, ogni volta che colleghi un hadith, un versetto, un pensiero. */
+const RACCOLTA_GRUPPI = ['versetto', 'sura', 'hadith', 'personaggio', 'storia', 'azione', 'asma', 'tema', 'fiqh'];
+
+function bloccoRaccolta(tipo, x) {
+  const perTipo = {};
+  store.ancoreDiCosa(tipo, x.id).forEach(a => {
+    if (!ANCORE[a.tipo] || a.tipo === tipo) return;
+    (perTipo[a.tipo] = perTipo[a.tipo] || []).push(a);
+  });
+
+  let h = '', totale = 0;
+  RACCOLTA_GRUPPI.filter(k => k !== tipo).forEach(k => {
+    const c = ANCORE[k];
+    const righe = (perTipo[k] || [])
+      .map(a => ({ target: a.target, txt: ancoraTesto(k, a.target) }))
+      .filter(a => a.txt);
+    if (!righe.length) return;
+    totale += righe.length;
+    h += `<h2>${c.ico} ${c.l} <span class="hd-c">${righe.length}</span></h2>
+      <div class="tema-lista">${righe.map(a =>
+        `<div class="tema-riga" onclick="${c.go(a.target)}">${esc(a.txt)}</div>`).join('')}</div>`;
+  });
+
+  const pens = store.pensieriDi(tipo, x.id);
+  if (pens.length) {
+    totale += pens.length;
+    h += `<h2>💭 Pensieri <span class="hd-c">${pens.length}</span></h2>`;
+    h += pens.map(p => `<div class="note-b"><div class="l">${esc(dataPensiero(p))}</div>
+      <div class="body" style="margin:0">${esc(p.testo)}</div></div>`).join('');
+  }
+
+  if (!totale) return `<div class="empty" style="padding:18px">Niente ancora.
+    Da qui non si aggiunge: apri un hadith, un versetto o un pensiero e collegalo a «${esc(x.titolo)}» — lo ritroverai qui per sempre.</div>`;
+  return `<div class="tema-conto">${totale === 1 ? 'una cosa collegata' : totale + ' cose collegate'} a questa scheda</div>` + h;
+}
 
 /* ============================================================
    CORANO — ricerca (sura + n° versetto + parole chiave) e sure
@@ -1024,35 +1666,61 @@ function mCard(p) {
     <div class="pm-seal">ﷺ</div>
     <div class="pm-body">
       <div class="pm-lab">Il Sigillo dei Profeti · خاتم النبيين</div>
-      <div class="pm-ar">${esc(p.nome_arabo || 'محمد ﷺ')}</div>
-      <h3>${esc(p.nome)}</h3>
-      <p>${esc(p.biografia || '')}</p>
+      <div class="pm-ar">${esc(p.arabo || 'محمد ﷺ')}</div>
+      <h3>${esc(p.titolo)}</h3>
+      <p>${esc(p.sommario || p.corpo || '')}</p>
     </div></div>`;
 }
 
+/* tutto ciò in cui cercare un personaggio, tag compresi */
+const pesoPersonaggio = p => senzaSegni([p.titolo, p.arabo, p.sommario, p.corpo, p.riferimento,
+  store.tagsDi(p.id, 'personaggio').join(' ')].filter(Boolean).join(' '));
+
 function renderPeople() {
   const catOpts = '<option value="">Tutte le categorie</option>'
-    + '<option value="muhammad">Il Profeta Muḥammad ﷺ</option>'
-    + PERS_SEZIONI.map(s => `<option value="${s.k}">${s.t}</option>`).join('');
+    + `<option value="muhammad" ${peCat === 'muhammad' ? 'selected' : ''}>Il Profeta Muḥammad ﷺ</option>`
+    + PERS_SEZIONI.map(s => `<option value="${s.k}" ${peCat === s.k ? 'selected' : ''}>${s.t}</option>`).join('');
 
   let html = head('Personaggi · الأعلام', 'Cerca e sfoglia', 'Cerca per categoria o parole chiave. In cima il Profeta ﷺ, poi le categorie.');
+  html += `<div class="add-voce" onclick="openModalTipo('personaggio')">＋ Aggiungi un personaggio…</div>`;
   html += `<div class="quran-search"><div class="qs-grid qs-grid-2">
       <div class="qs-field"><label>Categoria</label>
-        <select id="pe-cat" onchange="peopleSearch()">${catOpts}</select></div>
+        <select id="pe-cat" onchange="peSet('cat',this.value)">${catOpts}</select></div>
       <div class="qs-field qs-kw"><label>Parole chiave</label>
-        <input id="pe-kw" placeholder="Nome, biografia, fonte…" oninput="peopleSearch()"></div>
+        <input id="pe-kw" placeholder="Nome, biografia, tag…" value="${esc(peKw)}" oninput="peSet('kw',this.value)"></div>
       <button class="qs-clear" onclick="peopleClear()" title="Azzera">✕</button>
-    </div></div>
-  <div id="pe-list"></div>`;
+    </div></div>`;
+
+  /* i tag usati dai personaggi, come pulsanti */
+  const conta = new Map();
+  store.list('personaggi').forEach(p => store.tagsDi(p.id, 'personaggio')
+    .forEach(t => conta.set(t, (conta.get(t) || 0) + 1)));
+  if (conta.size) html += `<div class="pf-tags">${[...conta.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'it'))
+    .map(([t, n]) => `<span class="chip ${peTag.includes(t) ? 'sel' : ''}" data-ptag="${esc(t)}">#${esc(t)}<span class="ch-n">${n}</span></span>`).join('')}</div>`;
+
+  html += `<div id="pe-list"></div>`;
   $('#p-people').innerHTML = html;
   peopleSearch();
 }
+/* lo stato della ricerca sta qui, non nel DOM: accendendo un tag si ridisegna */
+let peCat = '', peKw = '', peTag = [];
+function peSet(quale, v) { if (quale === 'cat') peCat = v; else peKw = v; peopleSearch(); }
+function peTagToggle(t) {
+  const i = peTag.indexOf(t);
+  i >= 0 ? peTag.splice(i, 1) : peTag.push(t);
+  renderPeople();
+}
 
 function peopleSearch() {
-  const cat = $('#pe-cat').value;
-  const kw = ($('#pe-kw').value || '').trim().toLowerCase();
+  const cat = peCat;
+  const kw = senzaSegni(peKw).trim();
   let list = store.list('personaggi');
-  if (kw) list = list.filter(p => (p.nome + ' ' + (p.nome_arabo || '') + ' ' + (p.biografia || '') + ' ' + (p.fonte || '')).toLowerCase().includes(kw));
+  if (kw) list = list.filter(p => pesoPersonaggio(p).includes(kw));
+  if (peTag.length) list = list.filter(p => {
+    const suoi = store.tagsDi(p.id, 'personaggio').map(senzaSegni);
+    return peTag.map(senzaSegni).every(t => suoi.includes(t));
+  });
 
   const sez = k => list.filter(p => p.categoria === k);
   let html = '';
@@ -1077,45 +1745,77 @@ function peopleSearch() {
       <div class="grid">${others.map(pCard).join('')}</div>`;
   }
 
-  $('#pe-list').innerHTML = html || `<div class="empty">Nessun personaggio trovato.</div>`;
+  $('#pe-list').innerHTML = html || `<div class="empty">${store.list('personaggi').length
+    ? 'Nessun personaggio con questi filtri.' : 'Nessun personaggio ancora — aggiungine uno qui sopra.'}</div>`;
 }
-function peopleClear() { $('#pe-cat').value = ''; $('#pe-kw').value = ''; peopleSearch(); }
+function peopleClear() { peCat = ''; peKw = ''; peTag = []; renderPeople(); }
 
 /* ============================================================
    HADITH — ricerca (fonte + parole chiave) e lista
    ============================================================ */
+/* «Bukhārī, Muslim e Tirmidhī» sono TRE fonti, non una etichetta sola:
+   il filtro deve pescare l'hadith da ognuna delle raccolte che lo riportano */
+const fontiDi = h => String(h.raccolta || '').split(/,| e /).map(s => s.trim()).filter(Boolean);
+
 function renderHadith() {
   /* fonti = raccolte effettivamente presenti tra gli hadith inseriti */
-  const fonti = [...new Set(store.list('hadith').map(h => h.raccolta).filter(Boolean))].sort();
+  const fonti = [...new Set(store.list('hadith').flatMap(fontiDi))].sort((a, b) => a.localeCompare(b, 'it'));
   const fonteOpts = '<option value="">Tutte le fonti</option>' +
-    fonti.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+    fonti.map(f => `<option value="${esc(f)}" ${f === hsFonte ? 'selected' : ''}>${esc(f)}</option>`).join('');
 
   let html = head('Hadith · الحديث', 'Cerca e sfoglia', 'Cerca per fonte (Bukhārī, Muslim, Tirmidhī…) o per parole chiave. Sotto, la lista.');
+  html += `<div class="add-voce" onclick="openModalTipo('hadith')">＋ Aggiungi un hadith…</div>`;
   html += `<div class="quran-search"><div class="qs-grid qs-grid-2">
       <div class="qs-field"><label>Fonte</label>
-        <select id="hs-fonte" onchange="hadithSearch()">${fonteOpts}</select></div>
+        <select id="hs-fonte" onchange="hsSet('fonte',this.value)">${fonteOpts}</select></div>
       <div class="qs-field qs-kw"><label>Parole chiave</label>
-        <input id="hs-kw" placeholder="Nel testo, nella nota, nell'isnād…" oninput="hadithSearch()"></div>
+        <input id="hs-kw" placeholder="Nel testo, nei tag, nell'isnād…" value="${esc(hsKw)}" oninput="hsSet('kw',this.value)"></div>
       <button class="qs-clear" onclick="hadithClear()" title="Azzera">✕</button>
-    </div></div>
-  <div id="hd-list"></div>`;
+    </div></div>`;
+
+  /* i tag usati dagli hadith, come pulsanti: sommandoli si restringe */
+  const conta = new Map();
+  store.list('hadith').forEach(h => store.tagsDi(h.id, 'hadith')
+    .forEach(t => conta.set(t, (conta.get(t) || 0) + 1)));
+  if (conta.size) html += `<div class="pf-tags">${[...conta.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'it'))
+    .map(([t, n]) => `<span class="chip ${hsTag.includes(t) ? 'sel' : ''}" data-htag="${esc(t)}">#${esc(t)}<span class="ch-n">${n}</span></span>`).join('')}</div>`;
+
+  html += `<div id="hd-list"></div>`;
   $('#p-hadith').innerHTML = html;
   hadithSearch();                                  /* prima resa: lista completa */
 }
+/* Lo stato della ricerca vive qui e non nel DOM: accendendo un tag la pagina
+   si ridisegna, e fonte e parole chiave devono restare dov'erano. */
+let hsTag = [], hsFonte = '', hsKw = '';
+function hsSet(quale, v) { if (quale === 'fonte') hsFonte = v; else hsKw = v; hadithSearch(); }
+function hsTagToggle(t) {
+  const i = hsTag.indexOf(t);
+  i >= 0 ? hsTag.splice(i, 1) : hsTag.push(t);
+  renderHadith();
+}
 function hadithSearch() {
-  const fonte = $('#hs-fonte').value;
-  const kw = ($('#hs-kw').value || '').trim().toLowerCase();
+  const fonte = hsFonte;
+  /* i segni non contano: «khamisa» deve trovare «khamīṣa» */
+  const kw = senzaSegni(hsKw).trim();
   let list = store.list('hadith');
-  if (fonte) list = list.filter(h => h.raccolta === fonte);
-  if (kw)    list = list.filter(h => (h.testo + ' ' + (h.nota || '') + ' ' + (h.isnad || '') + ' ' + (h.numero_rif || '') + ' ' + (h.raccolta || '')).toLowerCase().includes(kw));
+  if (fonte) list = list.filter(h => fontiDi(h).includes(fonte));
+  if (hsTag.length) list = list.filter(h => {
+    const suoi = store.tagsDi(h.id, 'hadith').map(senzaSegni);
+    return hsTag.map(senzaSegni).every(t => suoi.includes(t));   /* tutti, non uno qualsiasi */
+  });
+  if (kw)    list = list.filter(h => senzaSegni([h.titolo, h.testo, h.testo_ar, h.nota, h.isnad, h.numero_rif, h.raccolta,
+    store.tagsDi(h.id, 'hadith').join(' ')].filter(Boolean).join(' ')).includes(kw));
 
   const box = $('#hd-list');
-  const count = (fonte || kw) ? `<div class="qs-count">${list.length} hadith</div>` : '';
+  const count = (fonte || kw || hsTag.length) ? `<div class="qs-count">${list.length} hadith</div>` : '';
   box.innerHTML = count + (list.length
     ? `<div class="grid">${list.map(hCard).join('')}</div>`
     : `<div class="empty">Nessun hadith trovato tra quelli inseriti.</div>`);
 }
-function hadithClear() { $('#hs-fonte').value = ''; $('#hs-kw').value = ''; hadithSearch(); }
+function hadithClear() { hsTag = []; hsFonte = ''; hsKw = ''; renderHadith(); }
+/* dal tag dentro la scheda di un hadith alla lista filtrata su quel tag */
+function cercaHadithTag(t) { hsTag = [t]; nav('hadith'); }
 
 /* ============================================================
    SCHEDE DI STUDIO GENERICHE — Azioni, Segni dell'Ora,
@@ -1123,75 +1823,115 @@ function hadithClear() { $('#hs-fonte').value = ''; $('#hs-kw').value = ''; hadi
    descrizione, fonte }. Un solo motore: ricerca + griglia + dettaglio.
    La chiave della pagina è anche il nome della tabella nello store.
    ============================================================ */
-const STUDIO_PAGES = {
-  azioni:    { eye: 'Azioni · الأعمال',              title: 'Le azioni',        sub: 'Opere e loro peso: ciò che avvicina e ciò che allontana.',
-               cats: { buona: 'Buone azioni', culto: 'Atti di culto', peccato: 'Peccati' } },
-  segni_ora: { eye: "Segni dell'Ora · علامات الساعة", title: "I segni dell'Ora", sub: 'I segni minori e maggiori che precedono l’Ultimo Giorno.',
-               cats: { minore: 'Segni minori', maggiore: 'Segni maggiori' } },
-  creazione: { eye: 'La creazione · الخلق',          title: 'La creazione',     sub: 'Il cosmo, gli esseri e gli ordini del creato.' },
-  luoghi:    { eye: 'Luoghi · الأماكن',              title: 'I luoghi',         sub: 'Luoghi sacri e dell’aldilà, con il loro significato.',
-               cats: { sacro: 'Luoghi sacri', aldila: "Aldilà" } },
-};
-const catLabel = (cfg, k) => (cfg.cats && cfg.cats[k]) || k;
+/* ============================================================
+   AZIONI — il magazzino da cui nasce la giornata.
+   Non è una scheda-raccolta come i temi: un'azione si scrive con le sue
+   fonti addosso — l'hadith che la fonda, il passo del Corano, la storia —
+   e da lì diventa un'attività quotidiana.
+   ============================================================ */
+const AZ_CATS = { buona: 'Buone azioni', culto: 'Atti di culto', peccato: 'Peccati' };
+const catLabel = (cfg, k) => (cfg && cfg.cats && cfg.cats[k]) || AZ_CATS[k] || k;
 
-function gCard(key, x) {
-  const cfg = STUDIO_PAGES[key];
-  const badge = x.categoria ? esc(catLabel(cfg, x.categoria)) : esc(cfg.title);
-  return `<div class="card" onclick="openStudioDetail('${key}',${x.id})">
-    <span class="k">${badge}</span>
+const azCard = x => {
+  const tags = store.tagsDi(x.id, 'azione');
+  const cad = store.tagsDi(x.id, 'azione', 'cadenza');
+  const d = String(x.corpo || '');
+  const n = store.attivitaDiAzione(x.id).length;
+  return `<div class="card" onclick="openStudioDetail('azioni','${x.id}')">
+    <span class="k">${esc(AZ_CATS[x.categoria] || x.categoria || 'Azione')}${n ? ' · ' + n + ' nella giornata' : ''}</span>
     <h3>${esc(x.titolo)}</h3>
-    ${x.arabo ? `<div class="arh">${esc(x.arabo)}</div>` : ''}
-    <p>${esc(x.descrizione || '')}</p></div>`;
+    <p>${esc(d.slice(0, 140))}${d.length > 140 ? '…' : ''}</p>
+    ${(tags.length || cad.length) ? `<div class="tgs">${
+      cad.map(t => `<span class="tg cd">⏱ ${esc(t)}</span>`).join('')
+      + tags.map(t => `<span class="tg">#${esc(t)}</span>`).join('')}</div>` : ''}</div>`;
+};
+const pesoAzione = x => senzaSegni([x.titolo, x.corpo, store.tagsDi(x.id, 'azione').join(' '),
+  store.tagsDi(x.id, 'azione', 'cadenza').join(' ')].filter(Boolean).join(' '));
+
+let azCat = '', azKw = '', azTag = [], azCad = [];
+function azSet(quale, v) { if (quale === 'cat') azCat = v; else azKw = v; azioniSearch(); }
+function azTagToggle(t) {
+  const i = azTag.indexOf(t);
+  i >= 0 ? azTag.splice(i, 1) : azTag.push(t);
+  renderAzioni();
+}
+function azCadToggle(t) {
+  const i = azCad.indexOf(t);
+  i >= 0 ? azCad.splice(i, 1) : azCad.push(t);
+  renderAzioni();
+}
+function azioniClear() { azCat = ''; azKw = ''; azTag = []; azCad = []; renderAzioni(); }
+
+function renderAzioni() {
+  const opts = '<option value="">Tutte le categorie</option>' + Object.entries(AZ_CATS)
+    .map(([k, v]) => `<option value="${k}" ${azCat === k ? 'selected' : ''}>${esc(v)}</option>`).join('');
+  let html = head('Azioni · الأعمال', 'Le azioni', 'Opere e loro peso: ciò che avvicina e ciò che allontana. Da qui nasce la tua giornata.');
+  html += `<div class="add-voce" onclick="openModalTipo('azione')">＋ Aggiungi un'azione…</div>`;
+  html += `<div class="quran-search"><div class="qs-grid qs-grid-2">
+      <div class="qs-field"><label>Categoria</label>
+        <select id="az-cat" onchange="azSet('cat',this.value)">${opts}</select></div>
+      <div class="qs-field qs-kw"><label>Parole chiave</label>
+        <input id="az-kw" placeholder="Nome, descrizione, tag…" value="${esc(azKw)}" oninput="azSet('kw',this.value)"></div>
+      <button class="qs-clear" onclick="azioniClear()" title="Azzera">✕</button>
+    </div></div>`;
+
+  const fila = (quale, scelti, attributo, prefisso) => {
+    const conta = new Map();
+    store.list('azioni').forEach(x => store.tagsDi(x.id, 'azione', quale)
+      .forEach(t => conta.set(t, (conta.get(t) || 0) + 1)));
+    if (!conta.size) return '';
+    return `<div class="pf-tags">${[...conta.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'it'))
+      .map(([t, n]) => `<span class="chip ${scelti.includes(t) ? 'sel' : ''}" ${attributo}="${esc(t)}">${prefisso}${esc(t)}<span class="ch-n">${n}</span></span>`).join('')}</div>`;
+  };
+  html += fila('tag', azTag, 'data-atag', '#');
+  /* la cadenza ha la sua fila, sotto: stessa meccanica, elenco separato */
+  const cadenze = fila('cadenza', azCad, 'data-acad', '⏱ ');
+  if (cadenze) html += `<div class="pf-lab">Cadenze</div>` + cadenze;
+
+  html += `<div id="az-list"></div>`;
+  $('#p-azioni').innerHTML = html;
+  azioniSearch();
 }
 
-function renderStudio(key) {
-  const cfg = STUDIO_PAGES[key];
-  const hasCats = cfg.cats && Object.keys(cfg.cats).length;
-  let html = head(cfg.eye, cfg.title, cfg.sub);
-  html += `<div class="quran-search"><div class="qs-grid ${hasCats ? 'qs-grid-2' : 'qs-grid-1'}">`;
-  if (hasCats) {
-    const opts = '<option value="">Tutte le categorie</option>' +
-      Object.entries(cfg.cats).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
-    html += `<div class="qs-field"><label>Categoria</label>
-      <select id="st-cat-${key}" onchange="studioSearch('${key}')">${opts}</select></div>`;
-  }
-  html += `<div class="qs-field qs-kw"><label>Parole chiave</label>
-      <input id="st-kw-${key}" placeholder="Titolo, testo, fonte…" oninput="studioSearch('${key}')"></div>
-      <button class="qs-clear" onclick="studioClear('${key}')" title="Azzera">✕</button>
-    </div></div>
-  <div id="st-list-${key}"></div>`;
-  $('#p-' + key).innerHTML = html;
-  studioSearch(key);
+function azioniSearch() {
+  const q = senzaSegni(azKw).trim();
+  let list = store.list('azioni');
+  if (azCat) list = list.filter(x => x.categoria === azCat);
+  if (q) list = list.filter(x => pesoAzione(x).includes(q));
+  if (azTag.length) list = list.filter(x => {
+    const suoi = store.tagsDi(x.id, 'azione').map(senzaSegni);
+    return azTag.map(senzaSegni).every(t => suoi.includes(t));
+  });
+  if (azCad.length) list = list.filter(x => {
+    const sue = store.tagsDi(x.id, 'azione', 'cadenza').map(senzaSegni);
+    return azCad.map(senzaSegni).every(t => sue.includes(t));
+  });
+  const box = $('#az-list');
+  const conto = (azCat || q || azTag.length || azCad.length) ? `<div class="qs-count">${list.length} azioni</div>` : '';
+  box.innerHTML = conto + (list.length
+    ? `<div class="grid">${list.map(azCard).join('')}</div>`
+    : `<div class="empty">${store.list('azioni').length
+        ? 'Nessuna azione con questi filtri.' : "Nessuna azione ancora — aggiungine una qui sopra."}</div>`);
 }
-function studioSearch(key) {
-  const catEl = $('#st-cat-' + key);
-  const cat = catEl ? catEl.value : '';
-  const kw = ($('#st-kw-' + key).value || '').trim().toLowerCase();
-  let list = store.list(key);
-  if (cat) list = list.filter(x => x.categoria === cat);
-  if (kw)  list = list.filter(x => ((x.titolo || '') + ' ' + (x.arabo || '') + ' ' + (x.descrizione || '') + ' ' + (x.fonte || '')).toLowerCase().includes(kw));
-  const box = $('#st-list-' + key);
-  const count = (cat || kw) ? `<div class="qs-count">${list.length} voci</div>` : '';
-  box.innerHTML = count + (list.length
-    ? `<div class="grid">${list.map(x => gCard(key, x)).join('')}</div>`
-    : `<div class="empty">Nessuna voce trovata.</div>`);
-}
-function studioClear(key) {
-  const catEl = $('#st-cat-' + key); if (catEl) catEl.value = '';
-  $('#st-kw-' + key).value = '';
-  studioSearch(key);
-}
+
+/* il nome resta `openStudioDetail` perché la richiamano in mezza app */
 function openStudioDetail(key, id) {
-  const cfg = STUDIO_PAGES[key];
-  const x = store.get(key, id);
-  const catL = x.categoria ? ' · ' + esc(catLabel(cfg, x.categoria)) : '';
-  let h = `<div class="reader"><div class="back" onclick="nav('${key}')">← Torna</div>`;
-  h += `<div class="eye">${esc(cfg.eye)}${catL}</div><h1 class="t">${esc(x.titolo)}</h1>`;
-  if (x.arabo)      h += `<div class="ayah" style="font-size:24px;padding:16px 22px">${esc(x.arabo)}</div>`;
-  if (x.descrizione) h += `<div class="body" style="margin-top:12px">${esc(x.descrizione)}</div>`;
-  if (x.fonte)      h += `<div class="src">📚 ${esc(x.fonte)}</div>`;
-  /* solo le AZIONI sono il magazzino della routine: hadith che le fondano + attività che ne derivano */
-  if (key === 'azioni') h += bloccoAzione(x);
+  const x = store.get('azioni', id);
+  if (!x) { toast('Azione non trovata'); return; }
+  const catL = x.categoria ? ' · ' + esc(catLabel(null, x.categoria)) : '';
+  let h = `<div class="reader"><div class="back" onclick="nav('azioni')">← Torna</div>`;
+  h += `<div class="eye">Azioni · الأعمال${catL}</div><h1 class="t">${esc(x.titolo)}</h1>`;
+  if (x.corpo) h += `<div class="trans">${esc(x.corpo)}</div>`;
+  const tags = store.tagsDi(x.id, 'azione');
+  const cad = store.tagsDi(x.id, 'azione', 'cadenza');
+  if (tags.length || cad.length) h += `<div class="tgs" style="margin:4px 0 18px">${
+    cad.map(t => `<span class="tg cd">⏱ ${esc(t)}</span>`).join('')
+    + tags.map(t => `<span class="tg">#${esc(t)}</span>`).join('')}</div>`;
+  h += bloccoAzione(x);
+  h += `<div class="kh-btns">
+    <button class="kh-b" onclick="openVoceEdit('azione','${x.id}')">✎ Modifica</button>
+    <button class="kh-b del" onclick="eliminaVoce('azione','${x.id}')">🗑 Elimina</button></div>`;
   h += '</div>'; $('#p-detail').innerHTML = h; show('detail');
 }
 
@@ -1223,6 +1963,16 @@ function bloccoAzione(x) {
       <button class="btn2" onclick="collegaHadith('${x.id}')">Collega</button></div>`;
   }
 
+  /* --- gli altri collegamenti: il Corano, le storie, i temi --- */
+  const altri = store.ancoreDiCosa('azione', x.id)
+    .filter(a => ANCORE[a.tipo] && a.tipo !== 'hadith' && a.tipo !== 'azione')
+    .map(a => ({ cfg: ANCORE[a.tipo], target: a.target, txt: ancoraTesto(a.tipo, a.target) }))
+    .filter(a => a.txt);
+  if (altri.length) {
+    h += `<h2>Collegato a</h2><div class="tema-lista">${altri.map(a =>
+      `<div class="tema-riga" onclick="${a.cfg.go(a.target)}">${a.cfg.ico} ${esc(a.txt)}</div>`).join('')}</div>`;
+  }
+
   /* --- attività già derivate --- */
   const att = store.attivitaDiAzione(x.id);
   h += `<h2>Nella mia giornata</h2>`;
@@ -1251,7 +2001,7 @@ function openAttivita(azioneId, attId) {
     attDraft = JSON.parse(JSON.stringify(store.list('attivita').find(a => String(a.id) === String(attId))));
     $('#att-s').textContent = 'Modifica come e quando torna.';
   } else {
-    const az = store.get('azioni', +azioneId);
+    const az = store.get('azioni', azioneId);
     attDraft = {
       azione_id: az ? az.id : null, adhkar_id: null,
       nome: az ? az.titolo : '', verso: az && evitare(az) ? 'evitare' : 'fare',
@@ -1328,9 +2078,9 @@ function renderAttForm() {
       : 'Spenta: è una cosa da <b>fare</b>. Accendila per le cose da cui stare lontano.'}</div></div>`;
 
   h += ev
-    ? fld('at-mom', 'Momento', 'select', store.momenti.filter(m => m.k !== 'lettura').map(m => opt(m.k, m.t, d.momento)).join(''))
+    ? fld('at-mom', 'Momento', 'select', store.momenti.map(m => opt(m.k, m.t + ' — ' + m.q, d.momento)).join(''))
     : `<div class="row2">
-        ${fld('at-mom', 'Momento', 'select', store.momenti.filter(m => m.k !== 'lettura').map(m => opt(m.k, m.t, d.momento)).join(''))}
+        ${fld('at-mom', 'Momento', 'select', store.momenti.map(m => opt(m.k, m.t + ' — ' + m.q, d.momento)).join(''))}
         ${fld('at-rip', 'Ripetizioni (facolt.)', 'input', `value="${esc(d.ripetizioni)}" placeholder="33×3"`)}
       </div>`;
 
@@ -1383,7 +2133,7 @@ function salvaAttivita() {
   if (d.id) store.updAttivita(d.id, d); else store.addAttivita(d);
   const az = d.azione_id;
   closeAttivita();
-  if (az) openStudioDetail('azioni', +az); else renderImpostazioni();
+  if (az) openStudioDetail('azioni', az); else renderImpostazioni();
   toast(d.verso === 'evitare' ? 'Aggiunta tra le cose da evitare ✓' : 'Ora è nella tua giornata ✓');
 }
 
@@ -1391,11 +2141,11 @@ function collegaHadith(azioneId) {
   const v = $('#az-hd').value;
   if (!v) { toast('Scegli un hadith'); return; }
   store.collega('azione', azioneId, 'hadith', v, 'fondata_su');
-  openStudioDetail('azioni', +azioneId); toast('Hadith collegato ✓');
+  openStudioDetail('azioni', azioneId); toast('Hadith collegato ✓');
 }
 function scollegaHadith(legameId, azioneId) {
   store.scollega(legameId);
-  openStudioDetail('azioni', +azioneId); toast('Scollegato');
+  openStudioDetail('azioni', azioneId); toast('Scollegato');
 }
 /* ============================================================
    HADITH — l'altro capo del flusso.
@@ -1406,6 +2156,11 @@ const RUOLI = { riporta: '🗣 lo riporta', citato: '👤 compare nel racconto' 
 function bloccoHadith(x) {
   let h = '';
 
+  /* --- i tag: cliccabili, portano nella ricerca degli hadith --- */
+  const tags = store.tagsDi(x.id, 'hadith');
+  if (tags.length) h += `<div class="tgs" style="margin:4px 0 18px">${tags.map(t =>
+    `<span class="tg" onclick="cercaHadithTag('${esc(t).replace(/'/g, '&#39;')}')" title="Cerca gli hadith con questo tag">#${esc(t)}</span>`).join('')}</div>`;
+
   /* --- personaggi: chi lo riporta, chi c'è dentro --- */
   const pers = store.collegatiA('hadith', x.id, 'personaggio');
   h += `<h2>Personaggi</h2>`;
@@ -1413,7 +2168,7 @@ function bloccoHadith(x) {
     const p = store.get('personaggi', l.id);
     if (!p) return '';
     return `<div class="att-row">
-      <div class="ar-b"><div class="ar-n" onclick="openDetail('personaggio','${p.id}')" style="cursor:pointer">${esc(p.nome)}</div>
+      <div class="ar-b"><div class="ar-n" onclick="openDetail('personaggio','${p.id}')" style="cursor:pointer">${esc(p.titolo)}</div>
       <div class="ar-m">${RUOLI[l.legame.relazione] || l.legame.relazione} · ${esc(CAT[p.categoria] || '')}</div></div>
       <button class="tb no" title="Scollega" onclick="scollegaDaHadith('${l.legame.id}','${x.id}')">✕</button></div>`;
   }).join('') || `<div class="empty" style="padding:12px">Nessuno collegato. Chi lo riporta? Chi compare nel racconto?</div>`;
@@ -1421,7 +2176,7 @@ function bloccoHadith(x) {
   const pLiberi = store.list('personaggi').filter(p => !pers.some(l => String(l.id) === String(p.id)));
   if (pLiberi.length) h += `<div class="link-add">
     <select id="hd-pers"><option value="">＋ collega un personaggio…</option>
-      ${pLiberi.map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}</select>
+      ${pLiberi.map(p => `<option value="${p.id}">${esc(p.titolo)}</option>`).join('')}</select>
     <select id="hd-ruolo">${Object.entries(RUOLI).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
     <button class="btn2" onclick="collegaPersonaggio('${x.id}')">Collega</button></div>`;
 
@@ -1435,7 +2190,7 @@ function bloccoHadith(x) {
     const n = store.attivitaDiAzione(a.id).length;
     return `<div class="att-row">
       <div class="ar-b"><div class="ar-n" onclick="openStudioDetail('azioni','${a.id}')" style="cursor:pointer">⚖️ ${esc(a.titolo)}</div>
-      <div class="ar-m">${esc(catLabel(STUDIO_PAGES.azioni, a.categoria))}${n ? ` · ${n} nella mia giornata` : ' · non ancora praticata'}</div></div>
+      <div class="ar-m">${esc(catLabel(null, a.categoria))}${n ? ` · ${n} nella mia giornata` : ' · non ancora praticata'}</div></div>
       <button class="tb no" title="Scollega" onclick="scollegaDaHadith('${l.id}','${x.id}')">✕</button></div>`;
   }).join('') || `<div class="empty" style="padding:12px">Nessuna azione nasce ancora da questo hadith.</div>`;
 
@@ -1446,7 +2201,7 @@ function bloccoHadith(x) {
     <button class="btn2" onclick="collegaAzione('${x.id}')">Collega</button></div>`;
   h += `<div class="link-add nuova-az">
     <input id="hd-aznome" placeholder="…oppure creane una nuova da qui">
-    <select id="hd-azcat">${Object.entries(STUDIO_PAGES.azioni.cats).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+    <select id="hd-azcat">${Object.entries(AZ_CATS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
     <button class="add" onclick="creaAzioneDaHadith('${x.id}')">＋ Crea azione</button></div>`;
 
   /* --- pensieri nati qui --- */
@@ -1475,10 +2230,7 @@ function creaAzioneDaHadith(hid) {
   const nome = val('hd-aznome');
   if (!nome) { toast("Scrivi il nome dell'azione"); return; }
   const hd = store.get('hadith', hid);
-  const a = store.add('azioni', {
-    titolo: nome, arabo: '', categoria: $('#hd-azcat').value,
-    descrizione: '', fonte: hd ? (hd.numero_rif || hd.raccolta || '') : '',
-  });
+  const a = store.add('azioni', { titolo: nome, categoria: $('#hd-azcat').value, corpo: '' });
   store.collega('azione', a.id, 'hadith', hid, 'fondata_su');
   counts(); openStudioDetail('azioni', a.id);
   toast('Azione creata — ora portala nella tua giornata');
@@ -1506,7 +2258,7 @@ function rimuoviAttivita(id) {
   const a = store.list('attivita').find(x => String(x.id) === String(id));
   const az = a ? a.azione_id : null;
   store.delAttivita(id);
-  if (az) openStudioDetail('azioni', +az); else renderImpostazioni();
+  if (az) openStudioDetail('azioni', az); else renderImpostazioni();
   toast('Rimossa dalla giornata');
 }
 
@@ -1618,11 +2370,13 @@ function pensieroDaAsma(id) {
 const TZ_LIST = ['UTC', 'Africa/Casablanca', 'Europe/Rome', 'Europe/London', 'Europe/Paris', 'Asia/Istanbul', 'Asia/Riyadh', 'Asia/Dubai', 'America/New_York'];
 const tzLabel = tz => tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' ');
 /* sezioni della sidebar che si possono nascondere (tutte tranne Oggi e Impostazioni) */
+/* stesso ordine della sidebar: Azioni sta nella mia vita, non nello studio */
 const TOGGLE_SEZIONI = [
   ['lettura', 'Lettura'], ['memorizzazione', 'Memorizzazione'], ['pensieri', 'Pensieri'],
+  ['azioni', 'Azioni'],
   ['allah', 'Allah'], ['quran', 'Corano'], ['hadith', 'Hadith'], ['people', 'Personaggi'],
   ['stories', 'Storie'], ['themes', 'Temi'], ['fiqh', 'Fiqh'],
-  ['azioni', 'Azioni'], ['segni_ora', "Segni dell'Ora"], ['creazione', 'Creazione'], ['luoghi', 'Luoghi'],
+  ['segni_ora', "Segni dell'Ora"], ['creazione', 'Creazione'], ['luoghi', 'Luoghi'],
 ];
 
 /* nasconde/mostra le voci di menu secondo le impostazioni */
@@ -1699,11 +2453,28 @@ function renderImpostazioni() {
     <div class="chips">${store.momenti.map(m => chipTog(S.vista.momenti[m.k] !== false, m.t, `toggleMomento('${m.k}')`)).join('')}</div>
   </div>`;
 
+  /* ---- 3.2 · FONTI ----
+     Scritte una volta qui, poi si pescano da un menu ovunque servano. */
+  const fnt = store.fontiDiTipo('raccolta');
+  html += `<div class="hd">📚 Fonti <span class="hd-c">${fnt.length}</span></div><div class="card set-card">
+    <div class="set-info">Le raccolte e le opere da cui citi. Il modale dell'hadith le pesca da qui: scrivi «Bukhārī» una volta sola.</div>
+    ${fnt.map(f => {
+      const usi = store.usiDiFonte(f.nome);
+      return `<div class="set-place">
+        <span class="pname">${esc(f.nome)}${f.nota ? ` <span class="set-lbl" style="margin:0;display:inline">${esc(f.nota)}</span>` : ''}${usi ? ` <span class="hd-c">${usi}</span>` : ''}</span>
+        <button class="rm" onclick="delFonte('${f.id}')" title="${usi ? 'Usata da ' + usi + ' hadith' : 'Elimina'}">✕</button></div>`;
+    }).join('') || `<div class="empty" style="padding:12px">Nessuna fonte. Aggiungine una qui sotto.</div>`}
+    <div class="set-add">
+      <input id="fn-nome" placeholder="Nome breve — Bukhārī" onkeydown="if(event.key==='Enter')addFonte()">
+      <input id="fn-nota" placeholder="Titolo per esteso (facolt.) — Ṣaḥīḥ al-Bukhārī" onkeydown="if(event.key==='Enter')addFonte()">
+      <button class="add" onclick="addFonte()">Aggiungi</button></div>
+  </div>`;
+
   /* ---- 3.5 · LA MIA ROUTINE ---- */
   const rt = store.list('attivita');
   html += `<div class="hd">🔁 La mia routine <span class="hd-c">${rt.length}</span></div><div class="card set-card">
     <div class="set-info">Le attività nascono dal magazzino <b onclick="nav('azioni')" style="cursor:pointer;color:var(--brass)">Azioni</b>: apri un'azione, collegale gli hadith che la fondano e portala nella giornata.</div>`;
-  html += store.momenti.filter(m => m.k !== 'lettura').map(m => {
+  html += store.momenti.map(m => {
     const items = rt.filter(a => a.momento === m.k);
     if (!items.length) return '';
     return `<div class="set-lbl">${m.ico} ${m.t}</div>` + items.map(a => {
@@ -1747,6 +2518,30 @@ function setHijriOffset(delta) {
 /* ---- Preghiere ---- */
 function setCambio(mode) { store.setSettings({ preghiere: { cambio: mode } }); renderImpostazioni(); }
 function setLuogoAttivo(id) { store.setSettings({ preghiere: { luogo_attivo: id } }); renderImpostazioni(); refreshOggi(); }
+/* ---- Fonti ---- */
+function addFonte() {
+  const nome = val('fn-nome');
+  if (!nome) { toast('Serve il nome della fonte'); return; }
+  const gia = store.fontiDiTipo().some(f => f.nome.toLowerCase() === nome.toLowerCase());
+  store.addFonte(nome, 'raccolta', val('fn-nota'));
+  renderImpostazioni();
+  toast(gia ? 'Questa fonte c’era già' : 'Fonte aggiunta ✓');
+}
+function delFonte(id) {
+  const f = store.fontiDiTipo().find(x => String(x.id) === String(id));
+  if (!f) return;
+  const usi = store.usiDiFonte(f.nome);
+  /* si cancella solo la voce di elenco: gli hadith già scritti tengono
+     il nome della raccolta nel loro testo, non si toccano */
+  const avviso = usi
+    ? `«${f.nome}» è citata da ${usi} hadith. Togliendola dall'elenco non potrai più sceglierla, ma quegli hadith restano com'erano. Procedo?`
+    : `Togliere «${f.nome}» dall'elenco delle fonti?`;
+  if (!confirm(avviso)) return;
+  store.delFonte(id);
+  renderImpostazioni();
+  toast('Fonte tolta');
+}
+
 function addLuogo() {
   const nome = val('lg-nome'); if (!nome) { toast('Serve il nome del luogo'); return; }
   const arr = store.getSettings().preghiere.luoghi.slice();
@@ -1787,7 +2582,7 @@ function exportJSON() {
 
 function renderPage(p) {
   counts();
-  if (STUDIO_PAGES[p]) { renderStudio(p); return; }
+  if (p === 'azioni') { renderAzioni(); return; }
   if (p === 'impostazioni') renderImpostazioni();
   if (p === 'allah') renderAllah();
   if (p === 'oggi') renderOggi();
@@ -1797,9 +2592,12 @@ function renderPage(p) {
   if (p === 'quran') renderQuran();
   if (p === 'hadith') renderHadith();
   if (p === 'people') renderPeople();
-  if (p === 'stories') $('#p-stories').innerHTML = head('Storie · القصص', 'Racconti', 'I grandi racconti in scene con insegnamenti.') + `<div class="grid">${store.list('storie').map(sCard).join('')}</div>`;
-  if (p === 'themes') $('#p-themes').innerHTML = head('Temi · المواضيع', 'Temi & concetti', 'I fili che raccolgono tutto ciò che vi appartiene.') + `<div class="grid">${store.list('temi').map(tCard).join('')}</div>`;
-  if (p === 'fiqh') $('#p-fiqh').innerHTML = head('Fiqh · الفقه', 'Regole e scuole', 'Solo qui la giurisprudenza: la giornata resta pratica pura.') + `<div class="grid">${store.list('fiqh').map(fCard).join('')}</div>`;
+  if (p === 'stories') renderStories();
+  if (p === 'themes') renderRaccolta('tema');
+  if (p === 'segni_ora') renderRaccolta('segno_ora');
+  if (p === 'creazione') renderRaccolta('creazione');
+  if (p === 'luoghi') renderRaccolta('luogo');
+  if (p === 'fiqh') renderRaccolta('fiqh');
 }
 
 /* ============================================================
@@ -1833,26 +2631,46 @@ function openDetail(tipo, id) {
     ${x.testo_ar ? `<div class="ayah">${esc(x.testo_ar)}</div>` : ''}
     <div class="trans">«${esc(x.testo)}»</div>
     <div class="src"><b>${GRADO[x.grado]}</b>${x.raccolta ? ' — ' + esc(x.raccolta) : ''}${x.isnad ? '<br>Isnād: ' + esc(x.isnad) : ''}</div>
-    ${x.nota ? `<div class="note-b"><div class="l">nota</div><div class="body" style="margin:0">${esc(x.nota)}</div></div>` : ''}`;
+    ${x.nota ? `<div class="note-b"><div class="l">nota</div><div class="body" style="margin:0">${esc(x.nota)}</div></div>` : ''}
+    <div class="kh-btns">
+      <button class="kh-b" onclick="openHadithEdit('${x.id}')">✎ Modifica</button>
+      <button class="kh-b del" onclick="eliminaHadith('${x.id}')">🗑 Elimina</button></div>`;
     h += bloccoHadith(x);
   }
   if (tipo === 'personaggio') {
     const x = store.get('personaggi', id);
-    h += `<div class="eye">${CAT[x.categoria]}</div><h1 class="t">${esc(x.nome)}</h1>
-    ${x.nome_arabo ? `<div class="ayah" style="font-size:22px;padding:16px 22px">${esc(x.nome_arabo)}</div>` : ''}
-    <div class="body">${esc(x.biografia || '')}</div>${x.fonte ? `<div class="src">📚 ${esc(x.fonte)}</div>` : ''}`;
+    h = `<div class="reader"><div class="back" onclick="nav('people')">← Torna</div>`;
+    h += `<div class="eye">${CAT[x.categoria] || esc(x.categoria || '')}</div><h1 class="t">${esc(x.titolo)}</h1>
+    ${x.arabo ? `<div class="ayah" style="font-size:22px;padding:16px 22px">${esc(x.arabo)}</div>` : ''}
+    ${x.sommario ? `<div class="trans">${esc(x.sommario)}</div>` : ''}
+    ${x.corpo ? `<div class="body">${esc(x.corpo)}</div>` : ''}
+    ${x.riferimento ? `<div class="src">📚 ${esc(x.riferimento)}</div>` : ''}`;
+    h += bloccoCollegamenti('personaggio', x.id);
+    h += `<div class="kh-btns">
+      <button class="kh-b" onclick="openVoceEdit('personaggio','${x.id}')">✎ Modifica</button>
+      <button class="kh-b del" onclick="eliminaVoce('personaggio','${x.id}')">🗑 Elimina</button></div>`;
   }
   if (tipo === 'storia') {
-    const x = store.get('storie', id); const su = suraOf(x.sura_id);
-    h += `<div class="eye">Storia ${su ? '· Sura ' + su.numero : ''}</div><h1 class="t">${esc(x.titolo)}</h1><div class="trans">${esc(x.riassunto || '')}</div>${x.insegnamenti ? `<h2>Insegnamenti</h2><div class="body">${esc(x.insegnamenti)}</div>` : ''}`;
+    const x = store.get('storie', id);
+    h = `<div class="reader"><div class="back" onclick="nav('stories')">← Torna</div>`;
+    h += `<div class="eye">Storia · القصة</div><h1 class="t">${esc(x.titolo)}</h1>
+    ${x.corpo ? `<div class="body">${esc(x.corpo)}</div>` : ''}
+    ${x.riferimento ? `<div class="src">📚 ${esc(x.riferimento)}</div>` : ''}`;
+    h += bloccoCollegamenti('storia', x.id);
+    h += `<div class="kh-btns">
+      <button class="kh-b" onclick="openVoceEdit('storia','${x.id}')">✎ Modifica</button>
+      <button class="kh-b del" onclick="eliminaVoce('storia','${x.id}')">🗑 Elimina</button></div>`;
   }
-  if (tipo === 'tema') {
-    const x = store.get('temi', id);
-    h += `<div class="eye">Tema</div><h1 class="t">${esc(x.nome)}</h1>${x.nome_arabo ? `<div class="ayah" style="font-size:22px;padding:16px 22px">${esc(x.nome_arabo)}</div>` : ''}<div class="trans">${esc(x.descrizione || '')}</div>`;
-  }
-  if (tipo === 'fiqh') {
-    const x = store.get('fiqh', id);
-    h += `<div class="eye">Fiqh · ${esc(x.categoria)}</div><h1 class="t">${esc(x.titolo)}</h1><div class="body" style="margin-top:12px">${esc(x.contenuto || '')}</div>${x.fonti ? `<div class="src">📚 ${esc(x.fonti)}</div>` : ''}`;
+  if (RACCOLTA_CFG[tipo]) {
+    const cfg = RACCOLTA_CFG[tipo], nav0 = VOCE_CFG[tipo].pagina;
+    const x = store.get(cfg.lista, id);
+    h = `<div class="reader"><div class="back" onclick="nav('${nav0}')">← Torna</div>`;
+    h += `<div class="eye">${esc(cfg.eye)}</div><h1 class="t">${esc(x.titolo)}</h1>
+    ${x.corpo ? `<div class="trans">${esc(x.corpo)}</div>` : ''}`;
+    h += bloccoRaccolta(tipo, x);
+    h += `<div class="kh-btns">
+      <button class="kh-b" onclick="openVoceEdit('${tipo}','${x.id}')">✎ Modifica</button>
+      <button class="kh-b del" onclick="eliminaVoce('${tipo}','${x.id}')">🗑 Elimina</button></div>`;
   }
   h += '</div>'; $('#p-detail').innerHTML = h; show('detail');
 }
@@ -1866,10 +2684,10 @@ function onSearch() {
   const hits = [];
   store.list('versetti').forEach(v => { if ((v.traduzione + ' ' + (v.contesto || '')).toLowerCase().includes(q)) hits.push(vCard(v)); });
   store.list('hadith').forEach(x => { if ((x.testo + ' ' + (x.nota || '') + ' ' + (x.raccolta || '')).toLowerCase().includes(q)) hits.push(hCard(x)); });
-  store.list('personaggi').forEach(x => { if ((x.nome + ' ' + (x.biografia || '')).toLowerCase().includes(q)) hits.push(pCard(x)); });
-  store.list('storie').forEach(x => { if ((x.titolo + ' ' + (x.riassunto || '')).toLowerCase().includes(q)) hits.push(sCard(x)); });
-  store.list('temi').forEach(x => { if ((x.nome + ' ' + (x.descrizione || '')).toLowerCase().includes(q)) hits.push(tCard(x)); });
-  store.list('fiqh').forEach(x => { if ((x.titolo + ' ' + (x.contenuto || '')).toLowerCase().includes(q)) hits.push(fCard(x)); });
+  store.list('personaggi').forEach(x => { if (pesoPersonaggio(x).includes(senzaSegni(q))) hits.push(pCard(x)); });
+  store.list('storie').forEach(x => { if (pesoStoria(x).includes(senzaSegni(q))) hits.push(sCard(x)); });
+  store.list('temi').forEach(x => { if (senzaSegni([x.titolo, x.corpo].filter(Boolean).join(' ')).includes(senzaSegni(q))) hits.push(tCard(x)); });
+  store.list('fiqh').forEach(x => { if (senzaSegni([x.titolo, x.corpo].filter(Boolean).join(' ')).includes(senzaSegni(q))) hits.push(fCard(x)); });
   store.list('adhkar').forEach(a => { if ((a.nome + ' ' + (a.traduzione || '')).toLowerCase().includes(q)) hits.push(`<div class="card"><span class="k">dhikr · ${a.momento.replace('_', ' ')}</span><h3>${esc(a.nome)}</h3><p>${esc(a.traduzione || '')}</p></div>`); });
   store.list('pensieri').forEach(p => { if (p.testo.toLowerCase().includes(q)) hits.push(`<div class="card" onclick="nav('pensieri')"><span class="k">pensiero</span><p>${esc(p.testo)}</p></div>`); });
   $('#p-search').innerHTML = head('Ricerca', `«${esc(q)}»`, hits.length + ' risultati.') + `<div class="grid">${hits.join('') || '<div class="empty">Nessun risultato.</div>'}</div>`;
@@ -1880,8 +2698,180 @@ const _q = $('#q'); if (_q) _q.oninput = onSearch;
 /* ============================================================
    MODALE — nuova voce
    ============================================================ */
-function openModal() { $('#veil').classList.add('on'); renderForm(); }
-function closeModal() { $('#veil').classList.remove('on'); }
+/* id della riga in modifica: null = si sta creando qualcosa di nuovo */
+let mEditId = null;
+
+function openModal() { mEditId = null; $('#veil').classList.add('on'); renderForm(); }
+/* apre il modale già sul tipo giusto: si arriva qui dal pulsante di una pagina */
+function openModalTipo(t) { $('#m-type').value = t; openModal(); }
+function closeModal() { $('#veil').classList.remove('on'); mEditId = null; mModalMode(); }
+
+/* intestazione e pulsante cambiano tra «nuovo» e «modifica» */
+function mModalMode(titolo, bottone, sotto) {
+  const h = $('#veil h2'), b = $('#btn-save'), s = $('#veil .s'), t = $('#m-type');
+  if (h) h.textContent = titolo || 'Nuova voce';
+  if (b) b.textContent = bottone || 'Salva';
+  if (s) s.textContent = sotto || 'I campi rispecchiano le tabelle Supabase.';
+  /* in modifica il tipo non si cambia: si sta correggendo quella riga lì */
+  if (t) t.closest('.f').style.display = titolo ? 'none' : '';
+}
+
+/* ---- modifica di un hadith già scritto ---- */
+function openHadithEdit(id) {
+  const x = store.get('hadith', id);
+  if (!x) { toast('Hadith non trovato'); return; }
+  mEditId = null;
+  $('#m-type').value = 'hadith';
+  $('#veil').classList.add('on');
+  renderForm();                       /* azzera fonti e tag, poi si riempie */
+  mEditId = x.id;
+  $('#f-titolo').value = x.titolo || '';
+  $('#f-ar').value = x.testo_ar || '';
+  $('#f-testo').value = x.testo || '';
+  $('#f-grado').value = x.grado || 'sahih';
+  $('#f-nota').value = x.nota || '';
+  fonteRighe = fonteDaSalvato(x);
+  renderFonti();
+  linkBoxInit('m', store.ancoreDiCosa('hadith', x.id).map(a => ({ tipo: a.tipo, id: a.target })),
+    { escludi: ['hadith'], vuoto: M_VUOTO });
+  tagBoxInit('m', store.tagsDi(x.id, 'hadith'));
+  mModalMode('Modifica l’hadith', 'Salva le modifiche', 'Correggi ciò che serve: fonti, tag, grado, testo.');
+}
+
+/* Ricostruisce le righe fonte+riferimento da come sono state salvate.
+   `numero_rif` è nella forma «Bukhārī 5812 · Muslim 2079»: ogni pezzo
+   comincia col nome di una fonte nota, il resto è il riferimento. */
+function fonteDaSalvato(x) {
+  const nomi = store.fontiDiTipo().map(f => f.nome).sort((a, b) => b.length - a.length);
+  const pezzi = String(x.numero_rif || '').split('·').map(s => s.trim()).filter(Boolean);
+  const righe = pezzi.map(p => {
+    const n = nomi.find(nome => p === nome || p.startsWith(nome + ' '));
+    return n ? { fonte: n, rif: p.slice(n.length).trim() } : { fonte: '', rif: p };
+  });
+  /* se il riferimento non diceva niente, si guarda almeno l'elenco delle raccolte */
+  if (!righe.length) {
+    const dalle = String(x.raccolta || '').split(/,| e /).map(s => s.trim()).filter(Boolean);
+    dalle.forEach(n => righe.push({ fonte: nomi.includes(n) ? n : '', rif: '' }));
+  }
+  return righe.length ? righe : [{ fonte: '', rif: '' }];
+}
+
+/* ============================================================
+   SCHEDE DI STUDIO — creare, correggere, togliere.
+   Vivono tutte nella tabella `voci`: cambia solo quali campi del form
+   finiscono in quali colonne. Una riga di configurazione per tipo, e
+   il resto (modale, collegamenti, tag, salvataggio) è in comune.
+   ============================================================ */
+const VOCE_CFG = {
+  personaggio: {
+    lista: 'personaggi', pagina: 'people', nome: 'il personaggio', serve: 'f-nome', mancante: 'Serve il nome',
+    campi: { 'f-nome': 'titolo', 'f-arn': 'arabo', 'f-cat': 'categoria',
+             'f-somm': 'sommario', 'f-bio': 'corpo', 'f-rif': 'riferimento' },
+    vuoto: 'Nessun collegamento. Quale hadith lo riporta? In quale storia compare?',
+  },
+  storia: {
+    lista: 'storie', pagina: 'stories', nome: 'la storia', serve: 'f-titolo', mancante: 'Serve il titolo',
+    campi: { 'f-titolo': 'titolo', 'f-testo': 'corpo', 'f-rif': 'riferimento' },
+    vuoto: 'Nessun collegamento. In quale sura è raccontata? Chi vi compare?',
+  },
+  /* Il tema si scrive una volta e non si tocca più: nome e concetto, basta.
+     Non ha né collegamenti né tag propri, perché è lui il punto di raccolta —
+     sono le altre schede che, nel tempo, si agganciano a lui. */
+  tema: {
+    lista: 'temi', pagina: 'themes', nome: 'il tema', serve: 'f-nome', mancante: 'Serve il nome del tema',
+    campi: { 'f-nome': 'titolo', 'f-desc': 'corpo' },
+    senzaLink: true, senzaTag: true,
+  },
+  /* Per ora identico al tema: gli argomenti di fiqh sono tanti, si scrivono
+     e basta. La struttura vera (gerarchia, scuole) si vedrà dopo. */
+  fiqh: {
+    lista: 'fiqh', pagina: 'fiqh', nome: "l'argomento", serve: 'f-nome', mancante: "Serve il nome dell'argomento",
+    campi: { 'f-nome': 'titolo', 'f-desc': 'corpo' },
+    senzaLink: true, senzaTag: true,
+  },
+  segno_ora: {
+    lista: 'segni_ora', pagina: 'segni_ora', nome: 'il segno', serve: 'f-nome', mancante: 'Serve il nome del segno',
+    campi: { 'f-nome': 'titolo', 'f-desc': 'corpo' },
+    senzaLink: true, senzaTag: true,
+  },
+  creazione: {
+    lista: 'creazione', pagina: 'creazione', nome: 'la voce', serve: 'f-nome', mancante: 'Serve il nome della voce',
+    campi: { 'f-nome': 'titolo', 'f-desc': 'corpo' },
+    senzaLink: true, senzaTag: true,
+  },
+  luogo: {
+    lista: 'luoghi', pagina: 'luoghi', nome: 'il luogo', serve: 'f-nome', mancante: 'Serve il nome del luogo',
+    campi: { 'f-nome': 'titolo', 'f-desc': 'corpo' },
+    senzaLink: true, senzaTag: true,
+  },
+  /* L'azione invece i collegamenti li ha eccome: sono il suo «perché» */
+  azione: {
+    lista: 'azioni', pagina: 'azioni', nome: "l'azione", serve: 'f-nome', mancante: "Serve il nome dell'azione",
+    campi: { 'f-nome': 'titolo', 'f-cat': 'categoria', 'f-desc': 'corpo' },
+    vuoto: "Nessun collegamento. Quale hadith la fonda? Quale passo del Corano? Quale storia?",
+    cadenze: true,
+  },
+};
+
+/* riempie il modale di una scheda già scritta */
+function openVoceEdit(tipo, id) {
+  const cfg = VOCE_CFG[tipo]; if (!cfg) return;
+  const x = store.get(cfg.lista, id);
+  if (!x) { toast('Scheda non trovata'); return; }
+  mEditId = null;
+  $('#m-type').value = tipo;
+  $('#veil').classList.add('on');
+  renderForm();                       /* azzera collegamenti e tag, poi si riempie */
+  mEditId = x.id;
+  for (const campo in cfg.campi) {
+    const el = document.getElementById(campo);
+    if (el) el.value = x[cfg.campi[campo]] || '';
+  }
+  linkBoxInit('m', cfg.senzaLink ? [] : store.ancoreDiCosa(tipo, x.id).map(a => ({ tipo: a.tipo, id: a.target })),
+    { escludi: [tipo], vuoto: cfg.vuoto });
+  tagBoxInit('m', cfg.senzaTag ? [] : store.tagsDi(x.id, tipo));
+  if (cfg.cadenze) tagBoxInit('mc', store.tagsDi(x.id, tipo, 'cadenza'));
+  mModalMode('Modifica ' + cfg.nome, 'Salva le modifiche', 'Correggi ciò che serve.');
+}
+
+/* il salvataggio, uguale per tutte: campi → collegamenti → tag */
+function salvaVoce(tipo) {
+  const cfg = VOCE_CFG[tipo];
+  if (!val(cfg.serve)) { toast(cfg.mancante); return; }
+  const campi = {};
+  for (const campo in cfg.campi) campi[cfg.campi[campo]] = val(campo);
+  const id = mEditId;
+  if (id) store.editVoce(id, campi);
+  const voce = id ? store.get(cfg.lista, id) : store.add(cfg.lista, campi);
+  /* i tipi senza casella non devono passare di qui: scriverebbero una lista
+     vuota e cancellerebbero tutto quello che si è agganciato nel tempo */
+  if (!cfg.senzaLink) store.setAncoreDiCosa(tipo, voce.id, linkValori('m'), LINK_GESTITI());
+  if (!cfg.senzaTag) store.setTags(voce.id, tagBoxValori('m'), tipo);
+  if (cfg.cadenze) store.setTags(voce.id, tagBoxValori('mc'), tipo, 'cadenza');
+  closeModal(); counts();
+  toast(id ? 'Scheda aggiornata ✓' : 'Scheda salvata ✓');
+  if (id) openDetail(tipo, voce.id); else nav(cfg.pagina);
+}
+
+function eliminaVoce(tipo, id) {
+  const cfg = VOCE_CFG[tipo]; if (!cfg) return;
+  const x = store.get(cfg.lista, id);
+  if (!x) return;
+  if (!confirm(`Eliminare «${x.titolo}»? Spariscono anche i suoi tag e i collegamenti.`)) return;
+  store.delVoce(id);
+  counts(); nav(cfg.pagina);
+  toast('Scheda eliminata');
+}
+
+function eliminaHadith(id) {
+  const x = store.get('hadith', id);
+  if (!x) return;
+  const nome = x.titolo || x.testo.slice(0, 40) + '…';
+  if (!confirm(`Eliminare «${nome}»? Spariscono anche i suoi tag e i collegamenti a personaggi e azioni.`)) return;
+  store.delHadith(id);
+  counts(); nav('hadith');
+  toast('Hadith eliminato');
+}
 const _bn = $('#btn-new'); if (_bn) _bn.onclick = openModal;
 $('#btn-cancel').onclick = closeModal;
 $('#btn-save').onclick = saveEntry;
@@ -1892,6 +2882,41 @@ $('#veil').onclick = e => { if (e.target === $('#veil')) closeModal(); };
 $('#pt-cancel').onclick = closePensieroModal;
 $('#pt-save').onclick = savePensiero;
 $('#veil-pensiero').onclick = e => { if (e.target === $('#veil-pensiero')) closePensieroModal(); };
+/* I tag sono testo libero: passarli dentro un onclick sarebbe un guaio con
+   apostrofi e virgolette. Si ascolta il clic da qui, si legge l'attributo, e
+   il prefisso della casella si ricava dal blocco che contiene il bersaglio —
+   così lo stesso ascoltatore serve tutti i modali. */
+document.addEventListener('click', e => {
+  const bers = e.target.closest('[data-tagx], [data-tagadd]');
+  if (!bers) return;
+  const cassetta = bers.closest('[data-tagbox]');
+  if (!cassetta) return;
+  const pre = cassetta.dataset.tagbox;
+  if (bers.dataset.tagx !== undefined) tagBoxDel(pre, bers.dataset.tagx);
+  else tagBoxAdd(pre, bers.dataset.tagadd);
+});
+$('#p-pensieri').addEventListener('click', e => {
+  const t = e.target.closest('[data-tag]');
+  if (t) pfTagToggle(t.dataset.tag);
+});
+$('#p-hadith').addEventListener('click', e => {
+  const t = e.target.closest('[data-htag]');
+  if (t) hsTagToggle(t.dataset.htag);
+});
+$('#p-people').addEventListener('click', e => {
+  const t = e.target.closest('[data-ptag]');
+  if (t) peTagToggle(t.dataset.ptag);
+});
+$('#p-stories').addEventListener('click', e => {
+  const t = e.target.closest('[data-stag]');
+  if (t) stTagToggle(t.dataset.stag);
+});
+$('#p-azioni').addEventListener('click', e => {
+  const t = e.target.closest('[data-atag]');
+  if (t) { azTagToggle(t.dataset.atag); return; }
+  const c = e.target.closest('[data-acad]');
+  if (c) azCadToggle(c.dataset.acad);
+});
 
 /* pannello attività */
 $('#att-cancel').onclick = closeAttivita;
@@ -1908,19 +2933,111 @@ function fld(id, label, type = 'input', attrs = '') {
 }
 const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
 
+/* i due blocchi che ogni scheda si porta dietro: collegamenti e tag */
+const BLOCCO_LINK = `<div class="f"><label>Collegato a <span class="lbl-hint">puoi sceglierne più di uno per tipo</span></label>
+    <div class="chips" id="m-tipi"></div></div>
+  <div id="m-quali"></div>`;
+const BLOCCO_TAG = (esempi, pre, etichetta) => {
+  pre = pre || 'm';
+  return `<div class="f" data-tagbox="${pre}"><label>${esc(etichetta || 'Tag')} <span class="lbl-hint">parole tue — scrivi e premi Invio</span></label>
+    <input id="${pre}-tag-in" class="pick-in" autocomplete="off" placeholder="${esc(esempi)}"
+      oninput="tagBoxSugg('${pre}')" onkeydown="tagBoxTasti('${pre}',event)">
+    <div class="pick-hits" id="${pre}-tag-sugg"></div>
+    <div class="chips" id="${pre}-tags"></div></div>`;
+};
+/* i tipi di collegamento che questi modali sanno maneggiare */
+const LINK_GESTITI = () => Object.keys(ANCORE);
+
 function renderForm() {
   const t = $('#m-type').value; const F = $('#m-fields');
   const suraOpts = store.list('sure').map(s => `<option value="${s.id}">${s.numero} · ${s.translit}</option>`).join('');
   const vOpts = '<option value="">—</option>' + store.list('versetti').map(v => { const s = suraOf(v.sura_id); return `<option value="${v.id}">${s ? s.numero : ''}:${v.numero}</option>`; }).join('');
   const hOpts = '<option value="">—</option>' + store.list('hadith').map(x => `<option value="${x.id}">${esc(x.numero_rif)}</option>`).join('');
   if (t === 'pensiero') F.innerHTML = fld('f-testo', 'Il pensiero', 'textarea') + `<div class="row2">${fld('f-anct', 'Nato da…', 'select', '<option value="">la giornata</option><option value="versetto">un versetto</option><option value="hadith">un hadith</option>')}${fld('f-anci', 'Quale', 'select', vOpts)}</div>`;
-  if (t === 'adhkar') F.innerHTML = fld('f-nome', 'Nome') + `<div class="row2">${fld('f-mom', 'Momento', 'select', store.momenti.filter(m => m.k !== 'lettura').map(m => `<option value="${m.k}">${m.t}</option>`).join(''))}${fld('f-ora', 'Orario fisso (facolt.)', 'input', 'type="time"')}</div>` + fld('f-rip', 'Ripetizioni (facolt.)', 'input', 'placeholder="33×3, 1–14…"') + fld('f-ar', 'Arabo (facolt.)', 'textarea', 'class="ar-in"') + fld('f-tr', 'Traduzione (facolt.)', 'textarea') + `<div class="row2">${fld('f-v', 'Versetto che ne parla', 'select', vOpts)}${fld('f-h', 'Hadith che lo conferma', 'select', hOpts)}</div>`;
+  if (t === 'adhkar') F.innerHTML = fld('f-nome', 'Nome') + `<div class="row2">${fld('f-mom', 'Momento', 'select', store.momenti.map(m => `<option value="${m.k}">${m.t}</option>`).join(''))}${fld('f-ora', 'Orario fisso (facolt.)', 'input', 'type="time"')}</div>` + fld('f-rip', 'Ripetizioni (facolt.)', 'input', 'placeholder="33×3, 1–14…"') + fld('f-ar', 'Arabo (facolt.)', 'textarea', 'class="ar-in"') + fld('f-tr', 'Traduzione (facolt.)', 'textarea') + `<div class="row2">${fld('f-v', 'Versetto che ne parla', 'select', vOpts)}${fld('f-h', 'Hadith che lo conferma', 'select', hOpts)}</div>`;
   if (t === 'versetto') F.innerHTML = fld('f-sura', 'Sura', 'select', suraOpts) + fld('f-num', 'Numero aya', 'input', 'type="number"') + fld('f-ar', 'Arabo', 'textarea', 'class="ar-in"') + fld('f-tr', 'Traduzione', 'textarea') + fld('f-ctx', 'Contesto (facolt.)', 'textarea');
-  if (t === 'hadith') F.innerHTML = fld('f-titolo', 'Titolo (come lo richiami)') + fld('f-ar', 'Testo arabo (facolt.)', 'textarea', 'class="ar-in"') + fld('f-testo', 'Testo italiano', 'textarea') + `<div class="row2">${fld('f-racc', 'Raccolta')}${fld('f-rif', 'Riferimento')}</div>` + fld('f-grado', 'Grado', 'select', '<option value="sahih">🟢 Sahih</option><option value="hasan">Hasan</option><option value="daif">Daif</option><option value="qudsi">Qudsi</option><option value="non_verificato">Da verificare</option>') + fld('f-nota', 'Nota (facolt.)', 'textarea');
-  if (t === 'personaggio') F.innerHTML = `<div class="row2">${fld('f-nome', 'Nome')}${fld('f-arn', 'Nome arabo', 'input', 'class="ar-in"')}</div>` + fld('f-cat', 'Categoria', 'select', Object.entries(CAT).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')) + fld('f-bio', 'Biografia', 'textarea');
-  if (t === 'storia') F.innerHTML = fld('f-titolo', 'Titolo') + fld('f-sura', 'Sura', 'select', '<option value="">—</option>' + suraOpts) + fld('f-rias', 'Riassunto', 'textarea');
-  if (t === 'tema') F.innerHTML = `<div class="row2">${fld('f-nome', 'Nome')}${fld('f-arn', 'Arabo', 'input', 'class="ar-in"')}</div>` + fld('f-desc', 'Descrizione', 'textarea');
-  if (t === 'fiqh') F.innerHTML = fld('f-titolo', 'Titolo') + fld('f-cat', 'Categoria', 'select', '<option value="salat">Ṣalāt</option><option value="tahara">Ṭahāra</option><option value="madhab">Madhab</option><option value="digiuno">Digiuno</option><option value="altro">Altro</option>') + fld('f-cont', 'Contenuto', 'textarea') + fld('f-fonti', 'Fonti (facolt.)');
+  if (t === 'hadith') F.innerHTML = fld('f-titolo', 'Titolo (come lo richiami)') + fld('f-ar', 'Testo arabo (facolt.)', 'textarea', 'class="ar-in"') + fld('f-testo', 'Testo italiano', 'textarea')
+    + `<div class="f"><label>Fonte e riferimento <span class="lbl-hint">un hadith può stare in più raccolte</span></label>
+        <div id="f-fonti"></div>
+        <button type="button" class="kh-b" onclick="fonteRigaAdd()">＋ Aggiungi fonte</button></div>`
+    + fld('f-grado', 'Grado', 'select', '<option value="sahih">🟢 Sahih</option><option value="hasan">Hasan</option><option value="daif">Daif</option><option value="qudsi">Qudsi</option><option value="non_verificato">Da verificare</option>') + fld('f-nota', 'Nota (facolt.)', 'textarea')
+    + BLOCCO_LINK + BLOCCO_TAG('abbigliamento, bambini, ṣabr…');
+  if (t === 'personaggio') F.innerHTML = `<div class="row2">${fld('f-nome', 'Nome')}${fld('f-arn', 'Nome arabo', 'input', 'class="ar-in"')}</div>`
+    + fld('f-cat', 'Categoria', 'select', Object.entries(CAT).map(([k, v]) => `<option value="${k}">${v}</option>`).join(''))
+    + fld('f-somm', 'In una riga', 'input', 'placeholder="Come lo riassumeresti: «Il servitore del Profeta ﷺ per dieci anni»"')
+    + fld('f-bio', 'Biografia', 'textarea')
+    + fld('f-rif', 'Fonte (facolt.)', 'input', 'placeholder="Dove l’hai letto"')
+    + BLOCCO_LINK + BLOCCO_TAG('nome, tribù, virtù…');
+  if (t === 'storia') F.innerHTML = fld('f-titolo', 'Titolo della storia')
+    + fld('f-testo', 'Il racconto', 'textarea')
+    + fld('f-rif', 'Fonte (facolt.)', 'input', 'placeholder="Sura, hadith, opera da cui viene"')
+    + BLOCCO_LINK + BLOCCO_TAG('profeti, pazienza, prova…');
+  if (t === 'azione') F.innerHTML = fld('f-nome', "Nome dell'azione", 'input', 'placeholder="Dire il tasbīḥ dopo la ṣalāt…"')
+    + fld('f-cat', 'Categoria', 'select', Object.entries(AZ_CATS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join(''))
+    + fld('f-desc', "In cosa consiste", 'textarea', 'placeholder="Come si fa, quando, con che intenzione."')
+    + BLOCCO_LINK + BLOCCO_TAG('lingua, cuore, purificazione…')
+    + BLOCCO_TAG('ogni giorno, dopo ogni ṣalāt, il venerdì…', 'mc', 'Cadenza');
+  /* le schede-raccolta hanno tutte lo stesso form: un nome e un concetto */
+  if (RACCOLTA_CFG[t]) F.innerHTML = fld('f-nome', 'Nome', 'input', `placeholder="${esc(RACCOLTA_CFG[t].cerca)}"`)
+    + fld('f-desc', 'Il concetto', 'textarea', 'placeholder="Che cos’è, in poche righe. Quello che vi si collegherà nel tempo arriva da solo."');
+  if (t === 'hadith') {
+    fonteRighe = [{ fonte: '', rif: '' }]; renderFonti();
+    linkBoxInit('m', [], { escludi: ['hadith'], vuoto: M_VUOTO });
+    tagBoxInit('m', []);
+  }
+  /* ogni scheda di studio si porta dietro collegamenti e tag, sempre uguali.
+     Si azzerano comunque, anche per chi non li mostra: così lo stato del
+     modale precedente non resta appeso. */
+  if (VOCE_CFG[t]) {
+    linkBoxInit('m', [], { escludi: [t], vuoto: VOCE_CFG[t].vuoto });
+    tagBoxInit('m', []);
+    if (VOCE_CFG[t].cadenze) tagBoxInit('mc', []);
+  }
+}
+const M_VUOTO = 'Nessun collegamento. Chi lo riporta? Quale azione ne nasce? Di quale tema parla?';
+
+/* ---- fonte e riferimento, a coppie ----
+   Un hadith sta spesso in più raccolte: «Bukhārī 5812 · Muslim 2079».
+   In tabella restano le due colonne di sempre, `raccolta` e `numero_rif`:
+   qui le coppie vengono composte in quella forma, la stessa che usavi già
+   a mano. Nessuna colonna nuova. */
+let fonteRighe = [{ fonte: '', rif: '' }];
+
+function renderFonti() {
+  const box = $('#f-fonti'); if (!box) return;
+  const raccolte = store.fontiDiTipo('raccolta');
+  if (!raccolte.length) {
+    box.innerHTML = `<div class="set-info">Non hai ancora nessuna fonte.
+      Creale in <b onclick="nav('impostazioni')" style="cursor:pointer;text-decoration:underline">Impostazioni → Fonti</b>: poi le peschi da qui senza riscriverle.</div>`;
+    return;
+  }
+  box.innerHTML = fonteRighe.map((r, i) => `<div class="fonte-riga">
+    <select onchange="fonteSet(${i},'fonte',this.value)">
+      <option value="">— scegli la fonte —</option>
+      ${raccolte.map(f => `<option value="${esc(f.nome)}" ${f.nome === r.fonte ? 'selected' : ''}>${esc(f.nome)}${f.nota ? ' · ' + esc(f.nota) : ''}</option>`).join('')}
+    </select>
+    <input placeholder="Riferimento — 5812" value="${esc(r.rif)}" oninput="fonteSet(${i},'rif',this.value)">
+    <button type="button" class="tb no" title="Togli questa fonte" onclick="fonteRigaDel(${i})"
+      ${fonteRighe.length > 1 ? '' : 'disabled'}>✕</button>
+  </div>`).join('');
+}
+function fonteSet(i, campo, v) { if (fonteRighe[i]) fonteRighe[i][campo] = v; }
+function fonteRigaAdd() { fonteRighe.push({ fonte: '', rif: '' }); renderFonti(); }
+function fonteRigaDel(i) { fonteRighe.splice(i, 1); if (!fonteRighe.length) fonteRighe = [{ fonte: '', rif: '' }]; renderFonti(); }
+
+/* «Bukhārī» + 5812 e «Muslim» + 2079 diventano
+   raccolta: "Bukhārī e Muslim" · riferimento: "Bukhārī 5812 · Muslim 2079" */
+function fonteComposta() {
+  const righe = fonteRighe.map(r => ({ fonte: String(r.fonte || '').trim(), rif: String(r.rif || '').trim() }))
+    .filter(r => r.fonte || r.rif);
+  const nomi = righe.map(r => r.fonte).filter(Boolean);
+  const raccolta = nomi.length <= 1 ? (nomi[0] || '')
+    : nomi.slice(0, -1).join(', ') + ' e ' + nomi[nomi.length - 1];
+  const numero_rif = righe.map(r => [r.fonte, r.rif].filter(Boolean).join(' ')).join(' · ');
+  /* la prima raccolta scelta va anche nella colonna `fonte_id`: è il legame
+     vero verso la tabella delle fonti, quello che un giorno reggerà le query */
+  const prima = store.fontiDiTipo().find(f => f.nome === nomi[0]);
+  return { raccolta, numero_rif, fonte_id: prima ? prima.id : null };
 }
 
 function saveEntry() {
@@ -1928,11 +3045,27 @@ function saveEntry() {
   if (t === 'pensiero') { if (!val('f-testo')) { toast('Scrivi il pensiero'); return; } store.addPensiero(val('f-testo'), val('f-anct') && val('f-anci') ? [{ tipo: val('f-anct'), id: val('f-anci') }] : []); }
   if (t === 'adhkar') { if (!val('f-nome')) { toast('Serve il nome'); return; } store.add('adhkar', { nome: val('f-nome'), momento: val('f-mom'), ora: val('f-ora'), rip: val('f-rip'), arabo: val('f-ar'), traduzione: val('f-tr'), versetto_id: val('f-v') ? +val('f-v') : null, hadith_id: val('f-h') ? +val('f-h') : null }); }
   if (t === 'versetto') { if (!val('f-tr')) { toast('Serve la traduzione'); return; } store.add('versetti', { sura_id: +val('f-sura'), numero: +val('f-num') || 0, arabo: val('f-ar'), traduzione: val('f-tr'), contesto: val('f-ctx'), nota: '' }); }
-  if (t === 'hadith') { if (!val('f-testo')) { toast('Serve il testo'); return; } store.add('hadith', { titolo: val('f-titolo'), testo: val('f-testo'), testo_ar: val('f-ar'), raccolta: val('f-racc'), numero_rif: val('f-rif'), grado: val('f-grado'), narratore_id: null, isnad: '', nota: val('f-nota') }); }
-  if (t === 'personaggio') { if (!val('f-nome')) { toast('Serve il nome'); return; } store.add('personaggi', { nome: val('f-nome'), nome_arabo: val('f-arn'), categoria: val('f-cat'), biografia: val('f-bio'), fonte: '' }); }
-  if (t === 'storia') { if (!val('f-titolo')) { toast('Serve il titolo'); return; } store.add('storie', { titolo: val('f-titolo'), sura_id: val('f-sura') ? +val('f-sura') : null, riassunto: val('f-rias'), insegnamenti: '' }); }
+  if (t === 'hadith') {
+    if (!val('f-testo')) { toast('Serve il testo'); return; }
+    const F = fonteComposta();
+    const campi = { titolo: val('f-titolo'), testo: val('f-testo'), testo_ar: val('f-ar'),
+      raccolta: F.raccolta, numero_rif: F.numero_rif, fonte_id: F.fonte_id,
+      grado: val('f-grado'), nota: val('f-nota') };
+    if (mEditId) {
+      const id = mEditId;
+      store.editHadith(id, campi);
+      store.setAncoreDiCosa('hadith', id, linkValori('m'), LINK_GESTITI());
+      store.setTags(id, tagBoxValori('m'), 'hadith');
+      closeModal(); toast('Hadith aggiornato ✓');
+      openDetail('hadith', id);        /* si torna dov'eri, con le correzioni */
+      return;
+    }
+    const h = store.add('hadith', Object.assign({ narratore_id: null, isnad: '' }, campi));
+    store.setAncoreDiCosa('hadith', h.id, linkValori('m'), LINK_GESTITI());
+    store.setTags(h.id, tagBoxValori('m'), 'hadith');
+  }
+  if (VOCE_CFG[t]) { salvaVoce(t); return; }
   if (t === 'tema') { if (!val('f-nome')) { toast('Serve il nome'); return; } store.add('temi', { nome: val('f-nome'), nome_arabo: val('f-arn'), descrizione: val('f-desc') }); }
-  if (t === 'fiqh') { if (!val('f-titolo')) { toast('Serve il titolo'); return; } store.add('fiqh', { titolo: val('f-titolo'), categoria: val('f-cat'), contenuto: val('f-cont'), fonti: val('f-fonti') }); }
   closeModal(); toast('Voce salvata ✓');
   const on = document.querySelector('.lnk.on'); renderPage(on ? on.dataset.p : 'oggi');
 }

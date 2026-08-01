@@ -11,12 +11,24 @@
    finestre, attorno a dove stai leggendo.
    ============================================================ */
 
+/* I momenti della giornata: non etichette generiche ma fasce vere, agganciate
+   alle preghiere. `da` e `a` sono {preghiera, offset in minuti}; la fascia va
+   dall'inizio (compreso) alla fine (esclusa), e la notte scavalca mezzanotte.
+   `tutto_giorno` non è una fascia: è la colonna che resta ferma fino a Maghrib. */
 const MOMENTI = [
-  { k: 'risveglio',     t: 'Risveglio',        ico: '🌅' },
-  { k: 'dopo_salat',    t: 'Dopo la ṣalāt',    ico: '🕌' },
-  { k: 'lettura',       t: 'Lettura',          ico: '📖' },
-  { k: 'sera',          t: 'Sera',             ico: '🌆' },
-  { k: 'prima_dormire', t: 'Prima di dormire', ico: '🌙' },
+  { k: 'risveglio',     t: 'Risveglio',     q: 'da 20 min prima del Fajr a dopo Shurūq', ico: '🌅',
+    da: { p: 'fajr', off: -20 }, a: { p: 'shuruq', off: 20 } },
+  { k: 'mattino',       t: 'Mattino',       q: "dall'alba a Ẓuhr", ico: '☀️',
+    da: { p: 'shuruq', off: 20 }, a: { p: 'zuhr', off: 0 } },
+  { k: 'pomeriggio',    t: 'Pomeriggio',    q: 'da Ẓuhr a ʿAṣr', ico: '🌤️',
+    da: { p: 'zuhr', off: 0 }, a: { p: 'asr', off: 0 } },
+  { k: 'fine_giornata', t: 'Fine giornata', q: 'da ʿAṣr a Maghrib', ico: '🌇',
+    da: { p: 'asr', off: 0 }, a: { p: 'maghrib', off: 0 } },
+  { k: 'sera',          t: 'Sera',          q: 'da Maghrib a ʿIshāʾ', ico: '🌆',
+    da: { p: 'maghrib', off: 0 }, a: { p: 'isha', off: 0 } },
+  { k: 'notte',         t: 'Notte',         q: 'da ʿIshāʾ a Fajr', ico: '🌙',
+    da: { p: 'isha', off: 0 }, a: { p: 'fajr', off: -20 } },
+  { k: 'tutto_giorno',  t: 'Tutto il giorno', q: 'resta fino a Maghrib', ico: '🔁', sempre: true },
 ];
 
 const PREGHIERE = [
@@ -48,7 +60,7 @@ const SETTINGS_DEFAULT = {
   vista: {
     widget: { arco: true, marea: true, luna: true },
     lettore: 'flusso', memorizzatore: 'pagina',
-    sezioni: {}, momenti: { risveglio: true, dopo_salat: true, lettura: true, sera: true, prima_dormire: true },
+    sezioni: {}, momenti: { risveglio: true, mattino: true, pomeriggio: true, fine_giornata: true, sera: true, notte: true, tutto_giorno: true },
   },
 };
 
@@ -359,6 +371,124 @@ const store = (() => {
       return r;
     },
 
+    /* ---- collegamenti di una scheda qualsiasi ----
+       Si leggono nei DUE versi: chi ha creato il legame non conta, conta che
+       le due schede si vedano. Per SCRIVERLO invece serve un verso solo, se no
+       lo stesso collegamento finirebbe in tabella due volte a seconda della
+       scheda da cui lo crei. Questo è l'ordine: chi viene prima sta a sinistra
+       della freccia. Un'azione «nasce da» un hadith, un pensiero «nasce da»
+       tutto il resto — ed è così che le schede già scritte se li ritrovano. */
+    _versi: ['pensiero', 'azione', 'hadith', 'personaggio', 'storia', 'tema', 'fiqh',
+             'versetto', 'sura', 'asma'],
+    _relazione(da, a) {
+      if (da === 'pensiero') return 'nato_da';
+      if (da === 'azione' && a === 'hadith') return 'fondata_su';
+      return 'collegato';
+    },
+    ancoreDiCosa(tipo, id) {
+      const out = [];
+      DB.legami.forEach(l => {
+        if (this._etichette.includes(l.da_tipo) || this._etichette.includes(l.a_tipo)) return;
+        if (l.da_tipo === tipo && String(l.da_id) === String(id))
+          out.push({ legame_id: l.id, tipo: l.a_tipo, target: l.a_id });
+        else if (l.a_tipo === tipo && String(l.a_id) === String(id))
+          out.push({ legame_id: l.id, tipo: l.da_tipo, target: l.da_id });
+      });
+      return out;
+    },
+    /* `gestiti` = i tipi che il modale chiamante sa maneggiare. Tutto ciò che
+       resta fuori (per esempio i pensieri appesi a un hadith) non viene toccato:
+       non essendo nella lista non significa che vada cancellato. */
+    setAncoreDiCosa(tipo, id, ancore, gestiti) {
+      const nuove = (ancore || []).filter(a => a && a.tipo && a.id);
+      const chiave = a => a.tipo + '|' + a.id;
+      const restano = new Set(nuove.map(chiave));
+      const vecchie = this.ancoreDiCosa(tipo, id);
+      vecchie.forEach(a => {
+        if (gestiti && !gestiti.includes(a.tipo)) return;
+        if (!restano.has(a.tipo + '|' + a.target)) this.scollega(a.legame_id);
+      });
+      const gia = new Set(vecchie.map(a => a.tipo + '|' + a.target));
+      nuove.forEach(a => {
+        if (gia.has(chiave(a))) return;
+        const mio = this._versi.indexOf(tipo), suo = this._versi.indexOf(a.tipo);
+        const primaIo = mio >= 0 && (suo < 0 || mio <= suo);
+        if (primaIo) this.collega(tipo, id, a.tipo, a.id, this._relazione(tipo, a.tipo));
+        else this.collega(a.tipo, a.id, tipo, id, this._relazione(a.tipo, tipo));
+      });
+    },
+
+    /* ---- schede di studio (tabella `voci`): correggere e togliere ---- */
+    editVoce(id, patch) {
+      const v = DB.voci.find(x => String(x.id) === String(id));
+      if (!v) return null;
+      Object.assign(v, patch);
+      aggiorna('voci', patch, { id: v.id });
+      return v;
+    },
+    delVoce(id) {
+      const i = DB.voci.findIndex(x => String(x.id) === String(id));
+      if (i < 0) return false;
+      const tipo = DB.voci[i].tipo;
+      DB.legami.filter(l => (l.da_tipo === tipo && String(l.da_id) === String(id))
+        || (l.a_tipo === tipo && String(l.a_id) === String(id)))
+        .map(l => l.id).forEach(lid => this.scollega(lid));
+      DB.voci.splice(i, 1);
+      cancella('voci', { id });
+      return true;
+    },
+
+    /* ---- hadith: correggere e togliere ---- */
+    editHadith(id, patch) {
+      const h = DB.hadith.find(x => String(x.id) === String(id));
+      if (!h) return null;
+      Object.assign(h, patch);
+      aggiorna('hadith', patch, { id: h.id });
+      return h;
+    },
+    /* via l'hadith e via tutti i fili che lo toccano: tag, personaggi che lo
+       riportano, azioni che ne nascono, pensieri nati da lì */
+    delHadith(id) {
+      const i = DB.hadith.findIndex(x => String(x.id) === String(id));
+      if (i < 0) return false;
+      DB.legami.filter(l => (l.da_tipo === 'hadith' && String(l.da_id) === String(id))
+        || (l.a_tipo === 'hadith' && String(l.a_id) === String(id)))
+        .map(l => l.id).forEach(lid => this.scollega(lid));
+      DB.hadith.splice(i, 1);
+      cancella('hadith', { id });
+      return true;
+    },
+
+    /* ---- fonti: le raccolte e le opere da cui si cita ----
+       Stanno nel layer canonico: si scrivono una volta e poi si pescano
+       da lì, invece di riscrivere «Bukhārī» a ogni hadith. */
+    fontiDiTipo(tipo) {
+      return DB.fonti.filter(f => !tipo || f.tipo === tipo)
+        .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'it'));
+    },
+    addFonte(nome, tipo, nota) {
+      const v = String(nome || '').trim();
+      if (!v) return null;
+      const gia = DB.fonti.find(f => String(f.nome).toLowerCase() === v.toLowerCase());
+      if (gia) return gia;
+      const f = { id: nuovoId(), tipo: tipo || 'raccolta', nome: v, autore_id: null, nota: nota || null };
+      DB.fonti.push(f); salva('fonti', f);
+      return f;
+    },
+    delFonte(id) {
+      const i = DB.fonti.findIndex(f => String(f.id) === String(id));
+      if (i < 0) return false;
+      DB.fonti.splice(i, 1);
+      cancella('fonti', { id });
+      return true;
+    },
+    /* quanti hadith citano questa raccolta: serve a non cancellarla per sbaglio */
+    usiDiFonte(nome) {
+      const n = String(nome || '').trim();
+      return DB.hadith.filter(h => String(h.raccolta || '').split(/,| e /)
+        .map(s => s.trim()).includes(n)).length;
+    },
+
     /* ---- attività del giorno ---- */
     today() {
       const tz = DB.impostazioni.tempo.fuso;
@@ -386,6 +516,10 @@ const store = (() => {
       if (a.verso === 'evitare') return null;      /* le cose da evitare non scadono */
       const om = this.oraMin(a);
       if (om != null && this.nowMin() > om) return 'auto';
+      /* senza orario è la fascia a decidere: passata la sua finestra, è persa.
+         Quelle di tutto il giorno reggono fino al Maghrib. */
+      const m = MOMENTI.find(x => x.k === a.momento);
+      if (m && this.fasciaStato(m) === 'passato') return 'auto';
       return null;
     },
     isDone(id) { return this.stato(id) === 'fatto'; },
@@ -424,6 +558,44 @@ const store = (() => {
     },
     /* etichetta breve di un fuso: "UTC", "Rome", "Casablanca" */
     tzBreve: tz => tz === 'UTC' ? 'UTC' : String(tz || '').split('/').pop().replace('_', ' '),
+
+    /* ---- le fasce della giornata ----
+       Inizio e fine di una fascia, in minuti dopo mezzanotte. */
+    momentoMin(m, capo) {
+      const b = m[capo];
+      if (!b) return null;
+      const base = this.preghieraMin(b.p);
+      if (base == null) return null;
+      return base + (b.off || 0) + (DB.impostazioni.preghiere.correzioni[b.p] || 0);
+    },
+    /* la fascia in cui siamo adesso. La notte scavalca mezzanotte, quindi
+       vale sia dopo ʿIshāʾ sia prima del Fajr del giorno dopo. */
+    momentoOra() {
+      const ora = this.nowMin();
+      const fasce = MOMENTI.filter(m => !m.sempre);
+      for (const m of fasce) {
+        const d = this.momentoMin(m, 'da'), a = this.momentoMin(m, 'a');
+        if (d == null || a == null) continue;
+        if (d <= a ? (ora >= d && ora < a) : (ora >= d || ora < a)) return m.k;
+      }
+      return 'notte';
+    },
+    /* 'passato' | 'ora' | 'futuro' — serve a far scorrere la colonna con la giornata */
+    fasciaStato(m) {
+      if (m.sempre) return this.nowMin() >= (this.preghieraMin('maghrib') || 1e9) ? 'passato' : 'ora';
+      const corrente = this.momentoOra();
+      const ordine = MOMENTI.filter(x => !x.sempre).map(x => x.k);
+      const i = ordine.indexOf(m.k), c = ordine.indexOf(corrente);
+      if (i === c) return 'ora';
+      return i < c ? 'passato' : 'futuro';
+    },
+    /* a che ora comincia e finisce, già scritto */
+    fasciaOrario(m) {
+      if (m.sempre) return '';
+      const d = this.momentoMin(m, 'da'), a = this.momentoMin(m, 'a');
+      if (d == null || a == null) return '';
+      return this.fmtHM(d) + ' → ' + this.fmtHM(a);
+    },
 
     oraMin(a) {
       if (a.ancora === 'ora_fissa' && a.ora) return hm2min(a.ora);
@@ -507,9 +679,52 @@ const store = (() => {
     },
 
     /* ---- pensieri ---- */
+    /* le etichette viaggiano negli stessi legami ma non sono ancore: fuori */
     ancoreDi(pensieroId) {
-      return DB.legami.filter(l => l.da_tipo === 'pensiero' && String(l.da_id) === String(pensieroId))
+      return DB.legami.filter(l => l.da_tipo === 'pensiero' && !this._etichette.includes(l.a_tipo)
+        && String(l.da_id) === String(pensieroId))
         .map(l => ({ legame_id: l.id, tipo: l.a_tipo, target: l.a_id }));
+    },
+
+    /* ---- etichette: tag e cadenze ----
+       Un tag è un legame `pensiero → tag` dove l'id del tag è il tag stesso.
+       Niente colonna nuova, niente migration: e soprattutto un tag diventa
+       un nodo della rete come gli altri, quindi domani ci si può appendere
+       qualunque cosa (una scheda, un'azione) senza cambiare lo schema.
+
+       La **cadenza** funziona esattamente allo stesso modo ma vive in un
+       elenco suo (`a_tipo = 'cadenza'`): si scrive uguale, non si mescola.
+       Basta passare `quale` per lavorare sull'uno o sull'altro. */
+    _etichette: ['tag', 'cadenza'],
+    tagsDi(cosaId, tipo, quale) {
+      const et = quale || 'tag';
+      return DB.legami.filter(l => l.da_tipo === (tipo || 'pensiero') && l.a_tipo === et
+        && String(l.da_id) === String(cosaId)).map(l => l.a_id);
+    },
+    /* tutte le etichette esistenti, dalla più usata alla meno usata */
+    tuttiITag(quale) {
+      const et = quale || 'tag';
+      const conta = new Map();
+      DB.legami.filter(l => l.a_tipo === et).forEach(l => conta.set(l.a_id, (conta.get(l.a_id) || 0) + 1));
+      return [...conta.entries()].map(([tag, n]) => ({ tag, n }))
+        .sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag, 'it'));
+    },
+    /* rimpiazza le etichette di una cosa con quelle passate: toglie quelle
+       sparite, aggiunge le nuove, lascia stare le altre */
+    setTags(cosaId, tags, tipo, quale) {
+      tipo = tipo || 'pensiero';
+      const et = quale || 'tag';
+      const puliti = [];
+      (tags || []).forEach(t => {
+        const v = String(t || '').trim();
+        if (v && !puliti.includes(v)) puliti.push(v);
+      });
+      DB.legami.filter(l => l.da_tipo === tipo && l.a_tipo === et
+        && String(l.da_id) === String(cosaId) && !puliti.includes(l.a_id))
+        .map(l => l.id).forEach(id => this.scollega(id));
+      const ora = this.tagsDi(cosaId, tipo, et);
+      puliti.forEach(t => { if (!ora.includes(t)) this.collega(tipo, cosaId, et, t, et); });
+      return puliti;
     },
     pensieriDi(tipo, id) {
       const ids = DB.legami.filter(l => l.da_tipo === 'pensiero' && l.a_tipo === tipo && String(l.a_id) === String(id))
@@ -527,11 +742,45 @@ const store = (() => {
       aggiorna('asma', { spiegazione: x.spiegazione }, { numero: x.numero });
       return x;
     },
-    addPensiero(testo, ancore) {
+    addPensiero(testo, ancore, tags) {
       const p = { id: nuovoId(), user_id: uid(), testo, giorno: this.today(), stato: 'grezzo' };
       DB.pensieri.push(p); salva('pensieri', p);
       (ancore || []).forEach(a => { if (a && a.tipo && a.id) this.collega('pensiero', p.id, a.tipo, a.id, 'nato_da'); });
+      if (tags) this.setTags(p.id, tags);
       return p;
+    },
+    /* Riscrive un pensiero già salvato: il testo e la lista delle ancore.
+       Si tocca solo ciò che è cambiato — le ancore rimaste si lasciano stare,
+       così non perdono la loro relazione (un `si_riferisce_a` non diventa
+       `nato_da` solo perché hai corretto una virgola). */
+    editPensiero(id, testo, ancore, tags) {
+      const p = DB.pensieri.find(x => String(x.id) === String(id));
+      if (!p) return null;
+      p.testo = testo;
+      aggiorna('pensieri', { testo }, { id: p.id });
+      if (tags) this.setTags(p.id, tags);
+
+      const nuove = (ancore || []).filter(a => a && a.tipo && a.id);
+      const chiave = a => a.tipo + '|' + a.id;
+      const restano = new Set(nuove.map(chiave));
+      const vecchie = this.ancoreDi(p.id);
+      vecchie.forEach(a => { if (!restano.has(a.tipo + '|' + a.target)) this.scollega(a.legame_id); });
+      const gia = new Set(vecchie.map(a => a.tipo + '|' + a.target));
+      nuove.forEach(a => { if (!gia.has(chiave(a))) this.collega('pensiero', p.id, a.tipo, a.id, 'nato_da'); });
+      return p;
+    },
+    /* Prima i legami, poi il pensiero: un pensiero cancellato non deve
+       lasciare ancore orfane appese nella rete. */
+    delPensiero(id) {
+      const i = DB.pensieri.findIndex(x => String(x.id) === String(id));
+      if (i < 0) return false;
+      /* tutti i fili che partono da qui (ancore e tag) e quelli che arrivano */
+      DB.legami.filter(l => (l.da_tipo === 'pensiero' && String(l.da_id) === String(id))
+        || (l.a_tipo === 'pensiero' && String(l.a_id) === String(id)))
+        .map(l => l.id).forEach(lid => this.scollega(lid));
+      DB.pensieri.splice(i, 1);
+      cancella('pensieri', { id });
+      return true;
     },
 
     /* ---- Corano: indici e posizioni ---- */

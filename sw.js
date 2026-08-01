@@ -2,7 +2,7 @@
    In sviluppo prende sempre i file freschi dal server; la cache serve
    solo come rete di sicurezza quando si è offline.
    Si attiva solo se l'app è servita via http(s). */
-const CACHE = 'addukira-v3';
+const CACHE = 'addukira-v4';
 const SHELL = ['./', './index.html', './css/style.css',
   './js/supabase-config.js', './js/auth.js', './js/store.js', './js/i18n.js',
   './js/widgets.js', './js/app.js', './manifest.webmanifest',
