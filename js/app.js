@@ -39,6 +39,7 @@ function show(p) {
      e il toast torna al suo posto in basso */
   document.body.classList.toggle('con-lettore', p === 'lettura');
   if (p !== 'lettura') lettorePausa();
+  if (p !== 'memorizzazione') recNavPausa();
 }
 function nav(p) {
   if (p !== 'detail' && p !== 'search') backTo = p;   /* il dettaglio torna da dove sei venuto */
@@ -495,9 +496,10 @@ function renderMushaf(cfg) {
     if (mem) {
       const m = store.isMem(v.sura_id, v.aya);
       if (m) nMem++;
-      cls = m ? 'mem' : '';
+      cls = (m ? 'mem ' : '') + (Rec.on && Rec.id === v.id ? 'leggendo' : '');
       click = `store.toggleMem(${v.sura_id},${v.aya});renderMemorizzazione()`;
       tit = `${s.numero}:${v.aya} — ${m ? 'memorizzato: tocca per togliere' : 'tocca quando lo sai'}`;
+      dataIdx = ` data-idx="${v.id}"`;
     } else {
       const idx = store.idxDi(s.numero, v.aya);
       const bm = cfg.bmIdx > 0 && idx === cfg.bmIdx;
@@ -664,7 +666,8 @@ function lettorePausa(msg) {
 async function lettoreStep() {
   if (!Lettore.attivo) return;
   const idx = Lettore.idx;
-  let el = document.querySelector(`[data-idx="${idx}"]`);
+  /* selettore ancorato alla pagina: anche Memorizzazione ha i suoi data-idx */
+  let el = document.querySelector(`#p-lettura [data-idx="${idx}"]`);
   if (!el) {
     /* la sentinella sta già caricando: le lascio finire il lavoro */
     if (lpInCorso) { Lettore.timer = setTimeout(lettoreStep, 300); return; }
@@ -677,10 +680,10 @@ async function lettoreStep() {
     if (!Lettore.attivo) return;             /* pausa arrivata durante il caricamento */
     if (!ok) { lettorePausa('Non riesco a caricare i versetti da qui'); return; }
     renderLettura();
-    el = document.querySelector(`[data-idx="${idx}"]`);
+    el = document.querySelector(`#p-lettura [data-idx="${idx}"]`);
     if (!el) { lettorePausa(); return; }
   }
-  document.querySelectorAll('.leggendo').forEach(x => x.classList.remove('leggendo'));
+  document.querySelectorAll('#p-lettura .leggendo').forEach(x => x.classList.remove('leggendo'));
   el.classList.add('leggendo');
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const v = store.get('versetti', idx);      /* l'id delle ayat È l'indice globale */
@@ -788,7 +791,7 @@ async function vaiAlSegnalibro(e) {
   Lettore.idx = 0;                     /* il play riparte dal segnalibro */
   if (!dentro) await store.caricaAyat({ da: Math.max(1, bm - 3) });
   renderLettura();
-  const el = document.querySelector(`[data-idx="${bm}"]`);
+  const el = document.querySelector(`#p-lettura [data-idx="${bm}"]`);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
@@ -860,12 +863,12 @@ function ottavaPages(h, o) {
    'cumulato' = il totale accumulato, contro la retta che il piano disegna.
    SVG scritto a mano: niente librerie, niente build.
    ------------------------------------------------------------ */
-let mzGraf = { vista: 'giorno', giorni: 30 };
+let mzGraf = { vista: 'giorno', giorni: 30, piano: null };
 function setMzGrafVista(v) { mzGraf.vista = v; renderMemorizzazione(); }
 function setMzGrafGiorni(g) { mzGraf.giorni = +g; renderMemorizzazione(); }
 
-function mzChart() {
-  const A = store.andamentoMem();
+function mzChart(P) {
+  const A = store.andamentoMem(P && P.id);
   if (!A) return '';
   const dm = g => g.slice(8, 10) + '/' + g.slice(5, 7);
   const nv = v => v.toLocaleString('it');
@@ -966,89 +969,139 @@ function mzChart() {
   </div>`;
 }
 
+/* il form "nuovo piano": vive da solo così serve sia la pagina vuota
+   sia il "＋ nuovo piano in parallelo" quando altri piani corrono già */
+function mzFormHtml() {
+  if (!mzDraft.fine) mzDraft.fine = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
+  const U = store.unitaMem, u = U[mzDraft.tipo] || U.corano;
+  const arg = u.selezione ? mzDraft.sure : mzDraft.n;
+  const ayat = store.ayatObiettivo(mzDraft.tipo, arg);
+  const gg = Math.max(1, Math.round((new Date(mzDraft.fine + 'T12:00:00') - new Date(store.today() + 'T12:00:00')) / 86400000) + 1);
+  const alGiorno = Math.ceil(ayat / gg);
+  return `<div class="kh-active">
+    <div class="kh-lab">Nuovo piano</div>
+    <div class="kh-pos">Scegli cosa memorizzare e in quanto tempo. Il resto lo calcolo io.</div>
+
+    <div class="mz-lab">Cosa</div>
+    <div class="chips">${Object.entries(U).map(([k, v]) =>
+    `<span class="chip ${mzDraft.tipo === k ? 'sel' : ''}" onclick="mzSetTipo('${k}')">${esc(v.l)}</span>`).join('')}
+      ${!u.fisso && !u.selezione ? `<input class="mz-n" type="number" min="1" value="${mzDraft.n}" onchange="mzSetN(this.value)" oninput="mzSetN(this.value)">` : ''}
+    </div>
+    ${u.selezione ? `
+      <div class="sure-sel">
+        ${mzDraft.sure.map(num => `<span class="chip sel" onclick="mzTogliSura(${num})">${esc(store.nomeSura(num))} · ${store.vvSura(num)} vv ✕</span>`).join('')}
+        <select class="mz-sura-add" onchange="mzAggiungiSura(this.value);this.value=''">
+          <option value="">＋ scegli una sura…</option>
+          ${store.sureTutte().filter(s => !mzDraft.sure.includes(s.numero))
+      .map(s => `<option value="${s.numero}">${s.numero} · ${esc(s.nome)} · ${s.vv} vv</option>`).join('')}
+        </select>
+      </div>` : ''}
+
+    <div class="mz-lab">In quanto tempo</div>
+    <div class="chips">${[[365, 'un anno'], [730, 'due anni'], [1095, 'tre anni'], [90, 'tre mesi']].map(([g, l]) =>
+    `<span class="chip" onclick="mzSetGiorni(${g})">${l}</span>`).join('')}</div>
+    <div class="kh-start"><label>Entro il</label>
+      <input type="date" id="mz-fine" value="${esc(mzDraft.fine)}" onchange="mzSetFine(this.value)"></div>
+
+    <div class="mz-preview">
+      <b>${esc(store.labelObiettivo(mzDraft.tipo, arg))}</b> in <b>${gg}</b> giorni
+      <span class="mz-rate">${alGiorno} ${alGiorno === 1 ? 'versetto' : 'versetti'} al giorno</span>
+    </div>
+    <button class="kh-b start" onclick="avviaPianoMem()">▶ Inizia</button>
+  </div>`;
+}
+
+/* etichetta stabile anche a distanza di tempo (quella live di 'corano' deriva) */
+function mzLabelPiano(p) {
+  return p.obiettivo_tipo === 'corano' ? 'Tutto il Corano'
+    : store.labelObiettivo(p.obiettivo_tipo || 'corano', p.obiettivo_n);
+}
+
+/* sospesi e completati: la storia dei piani, sempre visibile in fondo */
+function mzStoricoHtml() {
+  let h = '';
+  const sosp = store.pianiMemSospesi();
+  if (sosp.length) {
+    h += `<div class="hd">Sospesi</div>` + sosp.map(p => {
+      const pr = store.progressoPiano(p);
+      return `<div class="att-row">
+        <div class="ar-b"><div class="ar-n">${esc(mzLabelPiano(p))}</div>
+        <div class="ar-m">iniziato il ${esc(p.inizio)} · ${Math.max(0, pr.adesso - pr.startVal)} di ${Math.max(1, pr.meta - pr.startVal)} fatti — lo studiato resta tuo</div></div>
+        <button class="kh-b start" onclick="store.resumePianoMem('${p.id}');renderMemorizzazione();toast('Piano ripreso da dove era')">▶ Riprendi</button>
+        <button class="tb no" onclick="if(confirm('Eliminare questo piano? I versetti memorizzati restano.')){store.delPianoMem('${p.id}');renderMemorizzazione()}">✕</button>
+      </div>`;
+    }).join('');
+  }
+  const fatti = store.pianiMemCompletati();
+  if (fatti.length) {
+    h += `<div class="hd">Completati <span class="hd-c">${fatti.length}</span></div>` + fatti.map(p => {
+      const D = store.durataPianoMem(p);
+      const vs = !D || D.vsPiano === null ? ''
+        : D.vsPiano > 0 ? `<span class="kc-ok">${D.vsPiano} giorni in anticipo</span>`
+          : D.vsPiano === 0 ? `<span class="kc-ok">proprio in tempo</span>`
+            : `<span class="kc-late">${-D.vsPiano} giorni oltre</span>`;
+      return `<div class="att-row kc">
+        <div class="kc-seal">✓</div>
+        <div class="ar-b"><div class="ar-n">${esc(mzLabelPiano(p))}</div>
+        <div class="ar-m">${esc(p.inizio)} → ${esc(p.completato_il || '')}${D ? ` · <b>${D.giorni} giorni</b> · ${D.ritmo} versetti al giorno` : ''} ${vs}</div></div>
+      </div>`;
+    }).join('');
+  }
+  return h;
+}
+
+function mzScegliPiano(id) { if (mzGraf.piano !== id) { mzGraf.piano = id; renderMemorizzazione(); } }
+function mzNuovoForm() { mzDraft.aperto = !mzDraft.aperto; renderMemorizzazione(); }
+
 function renderMemorizzazione() {
   const st = store.studio();
+  /* i piani arrivati in fondo si chiudono da soli, con festa */
+  store.controllaPianiMem().forEach(p =>
+    toast('🎉 Piano completato — ' + mzLabelPiano(p)));
   const S = store.statMem();
-  const P = S.piano;
+  const piani = S.piani;
+  const P = piani.find(x => String(x.id) === String(mzGraf.piano)) || piani[0] || null;
   const [ps, pe] = ottavaPages(st.hizb, st.ottava);
 
   let html = dayHeader('Memorizzazione');
 
   if (!P) {
-    /* --- nessun piano: si sceglie COSA e IN QUANTO TEMPO. Uno solo alla volta. --- */
-    if (!mzDraft.fine) mzDraft.fine = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
-    const U = store.unitaMem, u = U[mzDraft.tipo] || U.corano;
-    const arg = u.selezione ? mzDraft.sure : mzDraft.n;
-    const ayat = store.ayatObiettivo(mzDraft.tipo, arg);
-    const gg = Math.max(1, Math.round((new Date(mzDraft.fine + 'T12:00:00') - new Date(store.today() + 'T12:00:00')) / 86400000) + 1);
-    const alGiorno = Math.ceil(ayat / gg);
-
+    /* --- nessun piano in corso: si sceglie COSA e IN QUANTO TEMPO --- */
     html += `<div class="khatam-panel"><div class="kh-row">
       <div class="kh-count"><div class="n">${S.pctCorano}%</div><div class="l">memorizzato<br>del Corano</div></div>
-      <div class="kh-active">
-        <div class="kh-lab">Nessun piano in corso</div>
-        <div class="kh-pos">Scegli cosa memorizzare e in quanto tempo. Il resto lo calcolo io.</div>
-
-        <div class="mz-lab">Cosa</div>
-        <div class="chips">${Object.entries(U).map(([k, v]) =>
-      `<span class="chip ${mzDraft.tipo === k ? 'sel' : ''}" onclick="mzSetTipo('${k}')">${esc(v.l)}</span>`).join('')}
-          ${!u.fisso && !u.selezione ? `<input class="mz-n" type="number" min="1" value="${mzDraft.n}" onchange="mzSetN(this.value)" oninput="mzSetN(this.value)">` : ''}
-        </div>
-        ${u.selezione ? `
-          <div class="sure-sel">
-            ${mzDraft.sure.map(num => `<span class="chip sel" onclick="mzTogliSura(${num})">${esc(store.nomeSura(num))} · ${store.vvSura(num)} vv ✕</span>`).join('')}
-            <select class="mz-sura-add" onchange="mzAggiungiSura(this.value);this.value=''">
-              <option value="">＋ scegli una sura…</option>
-              ${store.sureTutte().filter(s => !mzDraft.sure.includes(s.numero))
-        .map(s => `<option value="${s.numero}">${s.numero} · ${esc(s.nome)} · ${s.vv} vv</option>`).join('')}
-            </select>
-          </div>` : ''}
-
-        <div class="mz-lab">In quanto tempo</div>
-        <div class="chips">${[[365, 'un anno'], [730, 'due anni'], [1095, 'tre anni'], [90, 'tre mesi']].map(([g, l]) =>
-        `<span class="chip" onclick="mzSetGiorni(${g})">${l}</span>`).join('')}</div>
-        <div class="kh-start"><label>Entro il</label>
-          <input type="date" id="mz-fine" value="${esc(mzDraft.fine)}" onchange="mzSetFine(this.value)"></div>
-
-        <div class="mz-preview">
-          <b>${esc(store.labelObiettivo(mzDraft.tipo, arg))}</b> in <b>${gg}</b> giorni
-          <span class="mz-rate">${alGiorno} ${alGiorno === 1 ? 'versetto' : 'versetti'} al giorno</span>
-        </div>
-        <button class="kh-b start" onclick="avviaPianoMem()">▶ Inizia</button>
-      </div></div></div>`;
-
-    /* sospesi e completati, come in Lettura */
-    const sosp = store.pianiMemSospesi();
-    if (sosp.length) {
-      html += `<div class="hd">Sospesi</div>` + sosp.map(p => `<div class="att-row">
-        <div class="ar-b"><div class="ar-n">Piano del ${esc(p.inizio)}</div>
-        <div class="ar-m">obiettivo entro ${esc(p.fine)} · era partito da ${p.base} versetti</div></div>
-        <button class="kh-b start" onclick="store.resumePianoMem('${p.id}');renderMemorizzazione();toast('Piano ripreso')">▶ Riprendi</button>
-        <button class="tb no" onclick="if(confirm('Eliminare questo piano?')){store.delPianoMem('${p.id}');renderMemorizzazione()}">✕</button>
-      </div>`).join('');
-    }
+      ${mzFormHtml()}
+    </div></div>`;
+    html += mzStoricoHtml();
     $('#p-memorizzazione').innerHTML = html;
     return;
   }
 
-  /* --- piano in corso: il pannello diventa analisi del proprio operato --- */
+  /* --- piani in corso (anche più d'uno): un blocco per ciascuno.
+         Col piano selezionato si leggono grafico, statistiche e testo. --- */
   const avanti = P.scarto >= 0;
   html += `<div class="khatam-panel"><div class="kh-row">
     <div class="kh-count"><div class="n">${S.pctCorano}%</div><div class="l">memorizzato<br>del Corano</div></div>
-    <div class="kh-active">
-      <div class="kh-lab">Piano in corso · giorno ${P.giorno} di ${P.totGiorni}</div>
-      <div class="kh-pos"><b>${esc(P.obiettivoLabel)}</b><br>
-        ${P.alGiorno} al giorno per finire entro il ${esc(P.fine)}${P.giorniRimasti ? ` · ${P.giorniRimasti} giorni rimasti` : ''}
-        <span class="mz-done">${P.fatteObiettivo} di ${P.obiettivo} fatti</span></div>
-      <div class="prog prog2"><i class="reale" style="width:${Math.min(100, P.pctObiettivo)}%"></i>
-        <span class="tacca" style="left:${Math.min(100, P.pctTempo)}%" title="dove dovresti essere"></span></div>
+    <div class="kh-col">` + piani.map(p => {
+    const sel = piani.length > 1 && p === P;
+    return `<div class="kh-active mz-piano ${sel ? 'sel' : ''}" ${piani.length > 1 ? `onclick="mzScegliPiano('${p.id}')"` : ''}>
+      <div class="kh-lab">Piano in corso · giorno ${p.giorno} di ${p.totGiorni}${sel ? ' · selezionato' : ''}</div>
+      <div class="kh-pos"><b>${esc(p.obiettivoLabel)}</b><br>
+        ${p.alGiorno} al giorno per finire entro il ${esc(p.fine)}${p.giorniRimasti ? ` · ${p.giorniRimasti} giorni rimasti` : ''}
+        <span class="mz-done">${p.fatteObiettivo} di ${p.obiettivo} fatti</span></div>
+      <div class="prog prog2"><i class="reale" style="width:${Math.min(100, p.pctObiettivo)}%"></i>
+        <span class="tacca" style="left:${Math.min(100, p.pctTempo)}%" title="dove dovresti essere"></span></div>
       <div class="kh-btns">
-        <button class="kh-b stop" onclick="store.stopPianoMem();renderMemorizzazione();toast('Piano sospeso')">⏸ Sospendi</button>
-        <button class="kh-b del" onclick="if(confirm('Eliminare il piano? I versetti memorizzati restano.')){store.delPianoMem('${P.id}');renderMemorizzazione()}">🗑 Elimina</button>
+        <button class="kh-b stop" onclick="event.stopPropagation();store.stopPianoMem('${p.id}');renderMemorizzazione();toast('Piano sospeso — lo studiato resta')">⏸ Sospendi</button>
+        <button class="kh-b del" onclick="event.stopPropagation();if(confirm('Eliminare il piano? I versetti memorizzati restano.')){store.delPianoMem('${p.id}');renderMemorizzazione()}">🗑 Elimina</button>
       </div>
+    </div>`;
+  }).join('') + `
+      <button class="kh-b mz-nuovo" onclick="mzNuovoForm()">${mzDraft.aperto ? '✕ Chiudi' : '＋ Nuovo piano in parallelo'}</button>
     </div></div></div>`;
 
-  html += mzChart();
+  if (mzDraft.aperto) html += `<div class="khatam-panel"><div class="kh-row">${mzFormHtml()}</div></div>`;
+
+  html += mzChart(P);
 
   /* --- analisi statistica --- */
   html += `<div class="stat-grid">
@@ -1103,19 +1156,22 @@ function renderMemorizzazione() {
     <span class="chip ${mzModo === 'pagina' ? 'sel' : ''}" onclick="setMemVista('pagina')">📖 Pagina</span>
     <span class="chip ${mzModo === 'lista' ? 'sel' : ''}" onclick="setMemVista('lista')">☑ Lista</span>
   </div>`;
+  html += recUiHtml();   /* la voce di Ḥuṣarī sul passo caricato */
 
   if (mzModo === 'pagina') {
     html += renderMushaf({ modo: 'memoria' });
   } else {
     html += store.list('ayat_demo').map(v => {
       const s = suraOf(v.sura_id); const isM = store.isMem(v.sura_id, v.aya);
-      return `<div class="mz-aya ${isM ? 'mem' : ''}">
+      return `<div class="mz-aya ${isM ? 'mem' : ''}${Rec.on && Rec.id === v.id ? ' leggendo' : ''}" data-idx="${v.id}">
         <button class="mz-chk" title="Segna come memorizzato" onclick="store.toggleMem(${v.sura_id},${v.aya});renderMemorizzazione()">${isM ? '✓' : ''}</button>
+        <button class="mz-play" title="Ascolta da qui" onclick="recPlay(${v.id})">▶</button>
         <div class="mz-num">${s ? s.numero : ''}:${v.aya}</div>
         <div class="mz-ar">${esc(v.arabo)}</div></div>`;
     }).join('');
   }
 
+  html += mzStoricoHtml();
   $('#p-memorizzazione').innerHTML = html;
 }
 
@@ -1186,7 +1242,7 @@ function anchorLabels(p) {
 }
 
 /* bozza del piano prima dell'avvio: cosa, quanto, entro quando */
-let mzDraft = { tipo: 'corano', n: 1, sure: [], fine: '' };
+let mzDraft = { tipo: 'corano', n: 1, sure: [], fine: '', aperto: false };
 function mzSetTipo(t) { mzDraft.tipo = t; renderMemorizzazione(); }
 function mzSetN(v) { mzDraft.n = Math.max(1, +v || 1); renderMemorizzazione(); }
 function mzSetFine(v) { mzDraft.fine = v; renderMemorizzazione(); }
@@ -1209,12 +1265,109 @@ function avviaPianoMem() {
   if (fine <= store.today()) { toast('La data deve essere nel futuro'); return; }
   const sel = store.unitaMem[mzDraft.tipo] && store.unitaMem[mzDraft.tipo].selezione;
   if (sel && !mzDraft.sure.length) { toast('Scegli almeno una sura'); return; }
-  store.newPianoMem(fine, mzDraft.tipo, sel ? mzDraft.sure : mzDraft.n);
-  mzDraft = { tipo: 'corano', n: 1, sure: [], fine: '' };
+  const p = store.newPianoMem(fine, mzDraft.tipo, sel ? mzDraft.sure : mzDraft.n);
+  mzDraft = { tipo: 'corano', n: 1, sure: [], fine: '', aperto: false };
+  if (p) mzGraf.piano = p.id;               /* il nuovo piano diventa quello selezionato */
   renderMemorizzazione();
-  const S = store.statMem();
-  toast(S.piano ? `Piano avviato · ${S.piano.alGiorno} versetti al giorno` : 'Piano avviato');
+  const sp = p && store.statMem().piani.find(x => String(x.id) === String(p.id));
+  toast(sp ? `Piano avviato · ${sp.alGiorno} versetti al giorno` : 'Piano avviato');
 }
+
+/* ============================================================
+   RECITAZIONE (Ḥuṣarī) — la voce della ḥifẓ: un'āya alla volta,
+   ripetuta N volte, avanti sul passo caricato, in loop se serve.
+   L'id dell'aya è direttamente il nome del file audio.
+   ============================================================ */
+const Rec = { on: false, id: 0, rip: 3, ripFatte: 0, loop: false, audio: null, riserva: false };
+function recAudio() {
+  if (!Rec.audio) {
+    Rec.audio = new Audio();
+    Rec.audio.preload = 'auto';
+    Rec.audio.onended = recEnded;
+    Rec.audio.onerror = recErrore;
+  }
+  return Rec.audio;
+}
+const recIds = () => store.list('ayat_demo').map(v => v.id);
+
+function recUiHtml() {
+  const p = Rec.id ? store._ayaDaIndice(Rec.id) : null;
+  return `<div class="rec-bar" id="rec-ui">
+    <button class="rb-b" title="Versetto precedente" onclick="recSalta(-1)">⏮</button>
+    <button class="rb-b play ${Rec.on ? 'on' : ''}" title="${Rec.on ? 'Pausa' : 'Ascolta il passo (Ḥuṣarī)'}" onclick="recToggle()">${Rec.on ? '⏸' : '▶'}</button>
+    <button class="rb-b" title="Versetto successivo" onclick="recSalta(1)">⏭</button>
+    <span class="rb-rip" title="Quante volte ripetere ogni versetto">${[1, 3, 5, 10].map(n =>
+      `<span class="chip ${Rec.rip === n ? 'sel' : ''}" onclick="recSetRip(${n})">×${n}</span>`).join('')}</span>
+    <button class="rb-b loop ${Rec.loop ? 'on' : ''}" title="Finito il passo, ricomincia da capo" onclick="recSetLoop()">🔁</button>
+    <span class="rb-pos">${p ? esc(store.fmtPos(p)) + (Rec.rip > 1 ? ` · ${Math.min(Rec.ripFatte + 1, Rec.rip)}/${Rec.rip}` : '') : 'Ḥuṣarī · ▶ per ascoltare'}</span>
+  </div>`;
+}
+function aggiornaRecUi() {
+  const el = document.getElementById('rec-ui');
+  if (el) el.outerHTML = recUiHtml();
+  document.querySelectorAll('#p-memorizzazione .leggendo').forEach(x => x.classList.remove('leggendo'));
+  if (Rec.id) {
+    const r = document.querySelector(`#p-memorizzazione [data-idx="${Rec.id}"]`);
+    if (r) { r.classList.add('leggendo'); if (Rec.on) r.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  }
+}
+function recToggle() {
+  if (Rec.on) { Rec.on = false; recAudio().pause(); aggiornaRecUi(); return; }
+  const a = recAudio();
+  if (Rec.id && a.src && a.currentTime > 0 && !a.ended) {   /* riprende a metà āya */
+    Rec.on = true; a.play().catch(() => recStop('Audio non disponibile')); aggiornaRecUi(); return;
+  }
+  recPlay(Rec.id || 0);
+}
+function recPlay(id) {
+  const ids = recIds();
+  if (!ids.length) { toast('Carica prima un passo da studiare'); return; }
+  Rec.id = ids.includes(+id) ? +id : ids[0];
+  Rec.on = true; Rec.ripFatte = 0; Rec.riserva = false;
+  recCarica();
+}
+function recCarica() {
+  const a = recAudio();
+  a.src = Rec.riserva ? store.audioUrlAyaRiserva(Rec.id) : store.audioUrlAya(Rec.id);
+  a.play().catch(() => { if (Rec.on) recErrore(); });
+  aggiornaRecUi();
+}
+function recEnded() {
+  if (!Rec.on) return;
+  Rec.ripFatte++;
+  if (Rec.ripFatte < Rec.rip) {                 /* stessa āya, di nuovo: nessuna rete */
+    const a = recAudio(); a.currentTime = 0; a.play().catch(() => {});
+    aggiornaRecUi(); return;
+  }
+  Rec.ripFatte = 0;
+  const ids = recIds(), i = ids.indexOf(Rec.id);
+  if (i < 0) { Rec.id = ids[0]; Rec.riserva = false; recCarica(); return; }  /* il passo è cambiato: riparto dal nuovo */
+  if (i + 1 < ids.length) { Rec.id = ids[i + 1]; Rec.riserva = false; recCarica(); }
+  else if (Rec.loop) { Rec.id = ids[0]; Rec.riserva = false; recCarica(); }
+  else recStop('Fine del passo ۩');
+}
+function recErrore() {
+  if (!Rec.on) return;
+  if (!Rec.riserva) { Rec.riserva = true; recCarica(); }   /* stessa voce, CDN di riserva */
+  else recStop('Audio non raggiungibile — controlla la connessione');
+}
+function recStop(msg) {
+  Rec.on = false; Rec.ripFatte = 0;
+  const a = recAudio(); a.pause(); try { a.currentTime = 0; } catch (e) {}
+  aggiornaRecUi();
+  if (msg) toast(msg);
+}
+function recSalta(d) {
+  const ids = recIds(); if (!ids.length) return;
+  const cur = ids.indexOf(Rec.id);
+  const i = Math.max(0, Math.min(ids.length - 1, (cur < 0 ? 0 : cur) + d));
+  Rec.id = ids[i]; Rec.ripFatte = 0; Rec.riserva = false;
+  Rec.on ? recCarica() : aggiornaRecUi();
+}
+function recSetRip(n) { Rec.rip = n; Rec.ripFatte = 0; aggiornaRecUi(); }
+function recSetLoop() { Rec.loop = !Rec.loop; aggiornaRecUi(); }
+/* cambiando pagina la voce si ferma: si riprende da dov'era con ▶ */
+function recNavPausa() { if (Rec.on) { Rec.on = false; if (Rec.audio) Rec.audio.pause(); } }
 
 /* la data del pensiero: in tabella è `giorno` (YYYY-MM-DD) */
 function dataPensiero(p) {

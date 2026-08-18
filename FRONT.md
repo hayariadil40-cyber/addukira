@@ -184,3 +184,38 @@ la safe-area iPhone (`env(safe-area-inset-bottom)`, richiede
 di casa/Siri. Funziona in Flusso e in Pagina (gli span `.mv` hanno lo
 stesso `data-idx`). Un domani il motore per āya si aggancia all'audio del
 qari: è già l'unità giusta.
+
+---
+
+## Memorizzazione: piani multipli, completamento, voce di Ḥuṣarī (18 ago 2026)
+
+**Il principio:** le āyat memorizzate vivono in `memorizzazione`, FUORI dai
+piani. Sospendere o eliminare un piano non ne tocca nemmeno una, e la
+percentuale del Corano in alto è sempre l'unione di tutto lo studiato.
+
+**Piani in corso anche più d'uno** (`pianiMemAttivi`): un blocco per
+ciascuno nel pannello; col tocco si seleziona quello che comanda grafico,
+statistiche e testo di studio. «＋ Nuovo piano in parallelo» apre il form.
+Ogni piano ha un perimetro (`progressoPiano`):
+- *sure scelte* → contano solo le āyat dentro quelle sure, in qualunque
+  momento segnate (una sospensione non perde nulla);
+- *tutto il Corano* → il totale assoluto;
+- *juz/ḥizb/versetti* → quantità senza perimetro, conta ciò che si è
+  aggiunto dalla `base` del piano.
+
+**Completamento:** `controllaPianiMem()` gira a ogni render della pagina —
+un piano che raggiunge la sua meta passa da solo a `completato` (con
+`completato_il`), festa nel toast e riga nello storico «Completati» con
+durata, ritmo e anticipo/ritardo (`durataPianoMem`). Sospesi e completati
+sono sempre visibili in fondo alla pagina.
+
+**Recitazione (Ḥuṣarī):** barra audio (`recUiHtml`) sopra il testo di
+studio — ▶/⏸, ⏮ ⏭, ripetizioni ×1/×3/×5/×10 per āya, 🔁 loop sul passo.
+L'āya in ascolto si illumina (`.leggendo`, `data-idx` scopato per pagina:
+`#p-lettura […]` vs `#p-memorizzazione […]`). URL in `store.js`:
+`audioUrlAya(id)` → `cdn.islamic.network/quran/audio/128/ar.husary/<id>.mp3`
+(l'id dell'aya È il numero globale 1–6236), con riserva automatica su
+`everyayah.com` (stessa registrazione) al primo errore di rete. La voce si
+ferma cambiando pagina e riprende da dov'era. Un domani: qari nelle
+impostazioni (`impostazioni.audio.qari`, c'è già `ar.husarymujawwad`) e
+cache offline del passo in studio via service worker.

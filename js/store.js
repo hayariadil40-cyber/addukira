@@ -980,9 +980,12 @@ const store = (() => {
       return `${+n || 1} ${u.l} · ≈ ${v.toLocaleString('it')} versetti`;
     },
     pianoMemAttivo: () => DB.piani_mem.find(p => p.stato === 'attivo'),
+    pianiMemAttivi: () => DB.piani_mem.filter(p => p.stato === 'attivo'),
     pianiMemSospesi: () => DB.piani_mem.filter(p => p.stato === 'sospeso'),
+    pianiMemCompletati: () => DB.piani_mem.filter(p => p.stato === 'completato')
+      .slice().sort((a, b) => String(b.completato_il || '').localeCompare(String(a.completato_il || ''))),
+    /* più piani in corso insieme: uno sulle sure corte, uno sul juz — convivono */
     newPianoMem(fine, tipo, n) {
-      if (this.pianoMemAttivo()) return null;
       tipo = tipo || 'corano';
       const p = {
         id: nuovoId(), user_id: uid(), inizio: this.today(), fine: fine || null,
@@ -993,9 +996,11 @@ const store = (() => {
       DB.piani_mem.push(p); salva('piani_mem', p);
       return p;
     },
-    stopPianoMem() { const p = this.pianoMemAttivo(); if (p) { p.stato = 'sospeso'; salva('piani_mem', p); } },
+    stopPianoMem(id) {
+      const p = id ? DB.piani_mem.find(x => String(x.id) === String(id)) : this.pianoMemAttivo();
+      if (p && p.stato === 'attivo') { p.stato = 'sospeso'; salva('piani_mem', p); }
+    },
     resumePianoMem(id) {
-      if (this.pianoMemAttivo()) return false;
       const p = DB.piani_mem.find(x => String(x.id) === String(id));
       if (p) { p.stato = 'attivo'; salva('piani_mem', p); return true; }
       return false;
@@ -1004,28 +1009,74 @@ const store = (() => {
       const i = DB.piani_mem.findIndex(x => String(x.id) === String(id));
       if (i >= 0) { DB.piani_mem.splice(i, 1); cancella('piani_mem', { id }); }
     },
+
+    /* Il perimetro e il progresso di un piano. Le aya memorizzate vivono in
+       `memorizzazione`, fuori dai piani: sospendere o eliminare un piano non
+       ne tocca nemmeno una.
+       - sure scelte: contano le aya DENTRO quelle sure, in qualunque momento
+         siano state segnate (anche durante una sospensione);
+       - tutto il Corano: conta il totale assoluto;
+       - juz/hizb/versetti: quantità senza perimetro — conta ciò che si è
+         aggiunto da quando il piano è partito (base). */
+    _rangesPiano(p) {
+      if ((p.obiettivo_tipo || 'corano') !== 'sura' || !Array.isArray(p.obiettivo_n)) return null;
+      return p.obiettivo_n.map(s => [this.idxDi(s, 1), this.idxDi(s, VERSI_SURA[s - 1] || 0)]);
+    },
+    progressoPiano(p) {
+      const tipo = p.obiettivo_tipo || 'corano';
+      const ranges = this._rangesPiano(p);
+      if (ranges) {
+        const dentro = m => ranges.some(([a, b]) => m.aya_id >= a && m.aya_id <= b);
+        const marks = DB.memorizzato.filter(dentro);
+        /* partenza = quanto del perimetro era già memorizzato prima del piano */
+        const startVal = marks.filter(m => !m.data || m.data < p.inizio).length;
+        return { startVal, meta: p.obiettivo || 1, adesso: marks.length, dentro };
+      }
+      if (tipo === 'corano') return { startVal: p.base || 0, meta: TOTALE_AYA, adesso: DB.memorizzato.length, dentro: null };
+      return { startVal: p.base || 0, meta: (p.base || 0) + (p.obiettivo || 1), adesso: Math.max(p.base || 0, DB.memorizzato.length), dentro: null };
+    },
+    /* i piani arrivati in fondo si chiudono da soli; torna quelli appena finiti */
+    controllaPianiMem() {
+      const finiti = [];
+      this.pianiMemAttivi().forEach(p => {
+        const pr = this.progressoPiano(p);
+        if (pr.adesso >= pr.meta) {
+          p.stato = 'completato'; p.completato_il = this.today(); salva('piani_mem', p);
+          finiti.push(p);
+        }
+      });
+      return finiti;
+    },
+    durataPianoMem(p) {
+      if (!p.inizio || !p.completato_il) return null;
+      const GG = 86400000;
+      const giorni = Math.max(1, Math.round((new Date(p.completato_il + 'T12:00:00') - new Date(p.inizio + 'T12:00:00')) / GG) + 1);
+      let vsPiano = null;
+      if (p.fine) vsPiano = Math.round((new Date(p.fine + 'T12:00:00') - new Date(p.completato_il + 'T12:00:00')) / GG);
+      return { giorni, ritmo: Math.round((p.obiettivo || 0) / giorni * 10) / 10, vsPiano };
+    },
     memDelGiorno(giorno) { return DB.memorizzato.filter(m => m.data === giorno).length; },
-    /* Andamento giorno per giorno del piano attivo: quanti versetti ho segnato ogni
-       giorno, quanti ne ho in totale, e dove la linea del piano dice che dovrei essere.
-       Copre tutto il periodo del piano, futuro compreso (là n e cum restano null). */
-    andamentoMem() {
-      const p = this.pianoMemAttivo();
+    /* Andamento giorno per giorno di UN piano: quanti versetti (del suo
+       perimetro) ho segnato ogni giorno, e dove la linea del piano dice che
+       dovrei essere. Copre tutto il periodo, futuro compreso (n e cum null). */
+    andamentoMem(pid) {
+      const p = pid ? DB.piani_mem.find(x => String(x.id) === String(pid)) : this.pianiMemAttivi()[0];
       if (!p || !p.fine) return null;
       const GG = 86400000;
       const gg = g => new Date(g + 'T12:00:00').getTime();
       const iso = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
       const oggi = this.today();
+      const pr = this.progressoPiano(p);
 
       const perGiorno = {};
-      DB.memorizzato.forEach(m => { if (m.data) perGiorno[m.data] = (perGiorno[m.data] || 0) + 1; });
+      DB.memorizzato.forEach(m => { if (m.data && (!pr.dentro || pr.dentro(m))) perGiorno[m.data] = (perGiorno[m.data] || 0) + 1; });
 
       const totGiorni = Math.max(1, Math.round((gg(p.fine) - gg(p.inizio)) / GG) + 1);
-      const daFare = Math.max(1, p.obiettivo || (TOTALE_AYA - p.base));
+      const daFare = Math.max(1, pr.meta - pr.startVal);
       const quota = daFare / totGiorni;
-      const meta = p.base + daFare;
 
       const giorni = [];
-      let cum = p.base;
+      let cum = pr.startVal;
       for (let i = 0; i < totGiorni; i++) {
         const g = iso(gg(p.inizio) + i * GG);
         const futuro = g > oggi;
@@ -1034,44 +1085,61 @@ const store = (() => {
         giorni.push({
           data: g, n, futuro, oggi: g === oggi,
           cum: futuro ? null : cum,
-          piano: Math.min(meta, p.base + quota * (i + 1)),
+          piano: Math.min(pr.meta, pr.startVal + quota * (i + 1)),
         });
       }
-      return { giorni, quota, base: p.base, obiettivo: daFare, meta, inizio: p.inizio, fine: p.fine, oggi, totGiorni };
+      return { giorni, quota, base: pr.startVal, obiettivo: daFare, meta: pr.meta, inizio: p.inizio, fine: p.fine, oggi, totGiorni };
     },
     statMem() {
       const tot = DB.memorizzato.length;
-      const s = { tot, pctCorano: Math.round(tot / TOTALE_AYA * 1000) / 10, oggi: this.memDelGiorno(this.today()), piano: null };
-      const p = this.pianoMemAttivo();
-      if (!p || !p.fine) return s;
+      /* la percentuale del Corano è l'unione di TUTTO lo studiato,
+         di qualunque piano sia figlio — e resta anche senza piani */
+      const s = { tot, pctCorano: Math.round(tot / TOTALE_AYA * 1000) / 10, oggi: this.memDelGiorno(this.today()), piani: [], piano: null };
+      s.piani = this.pianiMemAttivi().map(p => this._statPiano(p)).filter(Boolean);
+      s.piano = s.piani[0] || null;
+      return s;
+    },
+    _statPiano(p) {
+      if (!p || !p.fine) return null;
       const GG = 86400000;
       const d0 = new Date(p.inizio + 'T12:00:00'), d1 = new Date(p.fine + 'T12:00:00'), dn = new Date(this.today() + 'T12:00:00');
       const totGiorni = Math.max(1, Math.round((d1 - d0) / GG) + 1);
       const giorno = Math.min(totGiorni, Math.max(1, Math.round((dn - d0) / GG) + 1));
-      const daFare = Math.max(1, p.obiettivo || (TOTALE_AYA - p.base));
+      const pr = this.progressoPiano(p);
+      const daFare = Math.max(1, pr.meta - pr.startVal);
       const alGiorno = daFare / totGiorni;
-      const target = Math.min(TOTALE_AYA, Math.round(p.base + alGiorno * giorno));
-      const inizioOggi = Math.round(p.base + alGiorno * (giorno - 1));
-      const fatteNelPiano = DB.memorizzato.filter(m => m.data && m.data >= p.inizio).length;
-      s.piano = {
-        id: p.id, inizio: p.inizio, fine: p.fine, base: p.base,
+      const fatteObiettivo = Math.max(0, pr.adesso - pr.startVal);
+      const target = Math.min(pr.meta, Math.round(pr.startVal + alGiorno * giorno));
+      const inizioOggi = Math.round(pr.startVal + alGiorno * (giorno - 1));
+      const fatteNelPiano = DB.memorizzato.filter(m => m.data && m.data >= p.inizio && (!pr.dentro || pr.dentro(m))).length;
+      return {
+        id: p.id, inizio: p.inizio, fine: p.fine, base: pr.startVal, stato: p.stato,
         obiettivo: daFare, obiettivoLabel: this.labelObiettivo(p.obiettivo_tipo || 'corano', p.obiettivo_n),
         obiettivo_tipo: p.obiettivo_tipo || 'corano', obiettivo_n: p.obiettivo_n,
-        fatteObiettivo: Math.max(0, tot - p.base),
+        fatteObiettivo,
         totGiorni, giorno, giorniRimasti: Math.max(0, totGiorni - giorno),
         alGiorno: Math.ceil(alGiorno), target, inizioOggi,
-        restanoOggi: Math.max(0, target - tot),
-        scarto: tot - inizioOggi,
+        restanoOggi: Math.max(0, target - pr.adesso),
+        scarto: pr.adesso - inizioOggi,
         ritmoReale: Math.round(fatteNelPiano / giorno * 10) / 10,
         fatteNelPiano,
-        pctObiettivo: Math.round((tot - p.base) / daFare * 100),
+        pctObiettivo: Math.round(fatteObiettivo / daFare * 100),
         pctTempo: Math.round(giorno / totGiorni * 100),
         scaduto: this.today() > p.fine,
         stimaFine: fatteNelPiano > 0
-          ? new Date(dn.getTime() + Math.ceil(Math.max(0, daFare - (tot - p.base)) / (fatteNelPiano / giorno)) * GG).toISOString().slice(0, 10)
+          ? new Date(dn.getTime() + Math.ceil(Math.max(0, daFare - fatteObiettivo) / (fatteNelPiano / giorno)) * GG).toISOString().slice(0, 10)
           : null,
       };
-      return s;
+    },
+
+    /* ---- audio della recitazione (Ḥuṣarī): l'id dell'aya È il nome del file ---- */
+    qariAudio() { const a = DB.impostazioni.audio || {}; return a.qari || 'ar.husary'; },
+    audioUrlAya(id) { return `https://cdn.islamic.network/quran/audio/128/${this.qariAudio()}/${+id}.mp3`; },
+    audioUrlAyaRiserva(id) {
+      /* everyayah distribuisce la stessa registrazione di Ḥuṣarī, indirizzata per sura+aya */
+      const p = this._ayaDaIndice(+id);
+      const pad = (n, w) => String(n).padStart(w, '0');
+      return `https://everyayah.com/data/Husary_128kbps/${pad(p.sura, 3)}${pad(p.aya, 3)}.mp3`;
     },
 
     /* manutenzione */

@@ -698,3 +698,24 @@ body.con-lettore #lettore-ui-host{display:block}
 .vel-pop input[type=range]{width:100%;accent-color:var(--brass)}
 .vel-pop .vp-s{font-size:11.5px;color:var(--ink-soft);margin-top:7px}
 body.con-lettore .toast{bottom:calc(100px + env(safe-area-inset-bottom,0px))}
+
+/* ---- recitazione (hifz): la barra audio della memorizzazione ---- */
+.rec-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:12px;padding:8px 10px;margin:10px 0}
+.rb-b{background:transparent;border:1px solid var(--line);border-radius:999px;min-width:34px;height:34px;cursor:pointer;
+  font-size:13px;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.rb-b.play{background:var(--brass);border-color:var(--brass);color:#0f1e1a;min-width:42px;height:42px;font-size:15px}
+.rb-b.play.on{background:var(--brass-lite)}
+.rb-b.loop.on{border-color:var(--brass);color:var(--brass);font-weight:700}
+.rb-rip{display:flex;gap:5px}
+.rb-pos{margin-left:auto;font-size:12px;color:var(--ink-soft)}
+.mz-aya.leggendo{background:rgba(211,181,115,.16);box-shadow:inset 3px 0 0 var(--brass);border-radius:8px}
+.mz-play{background:transparent;border:1px solid var(--line);border-radius:999px;width:30px;height:30px;cursor:pointer;
+  color:var(--brass);flex:none;font-size:11px}
+
+/* ---- piani di memorizzazione multipli ---- */
+.kh-col{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0}
+.mz-piano{cursor:default}
+.kh-col .mz-piano[onclick]{cursor:pointer}
+.mz-piano.sel{outline:2px solid rgba(176,141,70,.45);outline-offset:3px;border-radius:10px}
+.mz-nuovo{align-self:flex-start;background:transparent;border:1px dashed var(--line);color:var(--ink-soft)}
