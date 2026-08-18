@@ -33,7 +33,13 @@ function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('o
 
 /* ---- navigazione ---- */
 const PAGES = ['oggi', 'lettura', 'memorizzazione', 'pensieri', 'allah', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'azioni', 'segni_ora', 'creazione', 'luoghi', 'impostazioni', 'search', 'detail'];
-function show(p) { PAGES.forEach(x => $('#p-' + x).classList.remove('on')); $('#p-' + p).classList.add('on'); window.scrollTo(0, 0); }
+function show(p) {
+  PAGES.forEach(x => $('#p-' + x).classList.remove('on')); $('#p-' + p).classList.add('on'); window.scrollTo(0, 0);
+  /* la barra del lettore vive solo in Lettura: altrove il play si ferma
+     e il toast torna al suo posto in basso */
+  document.body.classList.toggle('con-lettore', p === 'lettura');
+  if (p !== 'lettura') lettorePausa();
+}
 function nav(p) {
   if (p !== 'detail' && p !== 'search') backTo = p;   /* il dettaglio torna da dove sei venuto */
   document.querySelectorAll('.lnk').forEach(l => l.classList.toggle('on', l.dataset.p === p));
@@ -368,6 +374,7 @@ function renderLettura() {
     <span class="chip ${modo === 'flusso' ? 'sel' : ''}" onclick="setLettore('flusso')">📜 Flusso</span>
     <span class="chip ${modo === 'pagina' ? 'sel' : ''}" onclick="setLettore('pagina')">📖 Pagina</span>
   </div>`;
+  html += lettoreUiHtml();   /* barra flottante: su, segnalibro, play, ritmo */
   if (modo === 'pagina') {
     html += renderMushaf({ modo: 'lettura', bmIdx }) + bloccoContinua();
     $('#p-lettura').innerHTML = html; armaSentinella(); return;
@@ -408,7 +415,7 @@ function renderLettura() {
     const isHl = store.isHl(v.sura_id, v.aya);
     if (isBm) html += `<div class="marker">⛿ il tuo segnalibro · ${s.numero}:${v.aya}</div>`;
     /* qui si legge e basta: contesto, accadimenti e pensieri stanno nella scheda del versetto */
-    html += `<div class="aya-row ${isHl ? 'hl' : ''}"><div class="num">${v.aya}</div>
+    html += `<div class="aya-row ${isHl ? 'hl' : ''}${Lettore.idx === idx ? ' leggendo' : ''}" data-idx="${idx}"><div class="num">${v.aya}</div>
     <div class="tx"><div class="arq">${esc(v.arabo)}</div><div class="itq">${esc(v.it)}</div></div>
     <div class="act">
       <button class="ab bm ${isBm ? 'on' : ''}" aria-pressed="${isBm}" title="${isBm ? 'Il segnalibro è qui' : 'Metti il segnalibro'}" onclick="store.setBookmark(${v.sura_id},${v.aya});renderLettura();toast('Segnalibro su ${s.numero}:${v.aya}')">⛿</button>
@@ -484,7 +491,7 @@ function renderMushaf(cfg) {
         <div class="mushaf-text" dir="rtl">`;
     }
     nTot++;
-    let cls = '', click, tit;
+    let cls = '', click, tit, dataIdx = '';
     if (mem) {
       const m = store.isMem(v.sura_id, v.aya);
       if (m) nMem++;
@@ -492,12 +499,14 @@ function renderMushaf(cfg) {
       click = `store.toggleMem(${v.sura_id},${v.aya});renderMemorizzazione()`;
       tit = `${s.numero}:${v.aya} — ${m ? 'memorizzato: tocca per togliere' : 'tocca quando lo sai'}`;
     } else {
-      const bm = cfg.bmIdx > 0 && store.idxDi(s.numero, v.aya) === cfg.bmIdx;
-      cls = (store.isHl(v.sura_id, v.aya) ? 'hl ' : '') + (bm ? 'bm' : '');
+      const idx = store.idxDi(s.numero, v.aya);
+      const bm = cfg.bmIdx > 0 && idx === cfg.bmIdx;
+      cls = (store.isHl(v.sura_id, v.aya) ? 'hl ' : '') + (bm ? 'bm ' : '') + (Lettore.idx === idx ? 'leggendo' : '');
       click = `apriAya(${v.sura_id},${v.aya})`;
       tit = `${s.numero}:${v.aya} — apri la scheda`;
+      dataIdx = ` data-idx="${idx}"`;
     }
-    h += `<span class="mv ${cls}" ${mem ? `onclick="${click}" title="${tit}"` : ''}>${esc(v.arabo)}</span><span class="mv-n" title="${tit}" onclick="${click}">۝${cifreArabe(v.aya)}</span> `;
+    h += `<span class="mv ${cls}"${dataIdx} ${mem ? `onclick="${click}" title="${tit}"` : ''}>${esc(v.arabo)}</span><span class="mv-n" title="${tit}" onclick="${click}">۝${cifreArabe(v.aya)}</span> `;
   });
   if (aperto) h += `</div><div class="mushaf-foot">${lastPag(lastSura)}</div></div>`;
 
@@ -546,6 +555,160 @@ function armaSentinella() {
   if (!s || !('IntersectionObserver' in window)) return;
   lpObs = new IntersectionObserver(e => { if (e[0].isIntersecting) caricaPiu(); }, { rootMargin: '400px' });
   lpObs.observe(s);
+}
+
+/* ============================================================
+   LETTURA ASSISTITA — il play avanza per āya, non per pixel:
+   illumina un versetto, centra la vista, aspetta in proporzione
+   alla lunghezza, passa al successivo. Qualsiasi tocco = pausa.
+   E i salti rapidi: torna su, torna al segnalibro senza riavviare.
+   ============================================================ */
+const Lettore = { attivo: false, idx: 0, target: 0, timer: null, wl: null };
+const fineCoranoIdx = () => store._ayaIndex(114, 6);
+
+function lettoreSpv() {
+  const v = store.getSettings().vista || {};
+  return (v.lettoreAuto && v.lettoreAuto.spv) || 5;
+}
+
+/* barra flottante + finestrina del ritmo. È position:fixed ma vive dentro
+   #p-lettura: quando la pagina non è `on`, sparisce da sola. */
+function lettoreUiHtml() {
+  const on = Lettore.attivo;
+  const p = Lettore.idx ? store._ayaDaIndice(Lettore.idx) : null;
+  const k = store.activeKhatam();
+  const segnabile = !on && p && k && Lettore.idx !== (k.aya_id || 0);
+  return `<div id="lettore-ui">
+    <div class="lettore-bar">
+      <button class="lb-b" title="Torna in cima" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+      <button class="lb-b" title="Vai al segnalibro" onclick="vaiAlSegnalibro(event)">⛿</button>
+      <button class="lb-b play ${on ? 'on' : ''}" title="${on ? 'Pausa' : 'Lettura assistita'}" onclick="lettoreToggle(event)">${on ? '⏸' : '▶'}</button>
+      <button class="lb-b chip" title="Ritmo di lettura" onclick="lettoreVelPop(event)">${lettoreSpv()}s</button>
+      ${segnabile ? `<button class="lb-b segna" title="Sposta il segnalibro su ${esc(store.fmtPos(p))}" onclick="lettoreSegna(event)">⛿ ${p.sura}:${p.aya}</button>` : ''}
+    </div>
+    <div class="vel-pop" id="vel-pop" hidden>
+      <div class="vp-t">Ritmo: <b id="vel-val">${lettoreSpv()}s</b> per un versetto medio</div>
+      <input type="range" min="2" max="15" step="0.5" value="${lettoreSpv()}"
+        oninput="$('#vel-val').textContent=this.value+'s'" onchange="lettoreSetVel(this.value)">
+      <div class="vp-s">I versetti lunghi ricevono più tempo, i corti meno. Durante la lettura tocca ovunque per fermarti: resti sull'āya illuminata.</div>
+    </div>
+  </div>`;
+}
+function aggiornaLettoreUi() { const c = $('#lettore-ui'); if (c) c.outerHTML = lettoreUiHtml(); }
+
+function lettoreToggle(e) { if (e) e.stopPropagation(); Lettore.attivo ? lettorePausa() : lettorePlay(); }
+
+function lettorePlay() {
+  const k = store.activeKhatam();
+  if (!k) { toast('Avvia un khatam per la lettura assistita'); return; }
+  /* si parte dall'āya dopo il segnalibro; a khatam appena nato, da 1:1 */
+  if (!Lettore.idx) Lettore.idx = k.aya_id > 1 ? Math.min(fineCoranoIdx(), k.aya_id + 1) : 1;
+  const P = store.pianoKhatam();
+  Lettore.target = (P && Lettore.idx <= P.target) ? P.target : 0;
+  Lettore.attivo = true;
+  lettoreWake();
+  aggiornaLettoreUi();
+  lettoreStep();
+}
+
+function lettorePausa(msg) {
+  if (Lettore.timer) { clearTimeout(Lettore.timer); Lettore.timer = null; }
+  if (!Lettore.attivo) return;
+  Lettore.attivo = false;
+  if (Lettore.wl) { try { Lettore.wl.release(); } catch (e) {} Lettore.wl = null; }
+  aggiornaLettoreUi();
+  if (msg) toast(msg);
+}
+
+/* un passo: trova la riga dell'āya corrente (caricandola se serve),
+   illuminala, centrala, programma il passo successivo */
+async function lettoreStep() {
+  if (!Lettore.attivo) return;
+  const idx = Lettore.idx;
+  let el = document.querySelector(`[data-idx="${idx}"]`);
+  if (!el) {
+    /* la sentinella sta già caricando: le lascio finire il lavoro */
+    if (lpInCorso) { Lettore.timer = setTimeout(lettoreStep, 300); return; }
+    const w = store.finestra();
+    lpInCorso = true;
+    let ok;
+    if (w.a && idx > w.a) ok = await store.caricaAncora(120);
+    else ok = (await store.caricaAyat({ da: Math.max(1, idx - 3) })).length;
+    lpInCorso = false;
+    if (!Lettore.attivo) return;             /* pausa arrivata durante il caricamento */
+    if (!ok) { lettorePausa('Non riesco a caricare i versetti da qui'); return; }
+    renderLettura();
+    el = document.querySelector(`[data-idx="${idx}"]`);
+    if (!el) { lettorePausa(); return; }
+  }
+  document.querySelectorAll('.leggendo').forEach(x => x.classList.remove('leggendo'));
+  el.classList.add('leggendo');
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const v = store.get('versetti', idx);      /* l'id delle ayat È l'indice globale */
+  const parole = v && v.arabo ? v.arabo.trim().split(/\s+/).length : 12;
+  const spv = lettoreSpv();
+  const sec = Math.min(spv * 4, Math.max(2, spv * parole / 12));
+  Lettore.timer = setTimeout(lettoreAvanza, sec * 1000);
+}
+
+function lettoreAvanza() {
+  if (!Lettore.attivo) return;
+  if (Lettore.target && Lettore.idx >= Lettore.target) {
+    lettorePausa('⌁ Traguardo di oggi raggiunto — ▶ se vuoi continuare'); return;
+  }
+  if (Lettore.idx >= fineCoranoIdx()) { lettorePausa('۩ Sei alla fine del Corano'); return; }
+  Lettore.idx++;
+  lettoreStep();
+}
+
+/* durante il play qualsiasi tocco fa solo pausa: i bottoni non scattano,
+   niente azioni accidentali mentre lo schermo scorre */
+document.addEventListener('click', e => {
+  if (!Lettore.attivo) return;
+  e.preventDefault(); e.stopPropagation();
+  lettorePausa('In pausa — ▶ per riprendere da qui');
+}, true);
+
+/* lo schermo non deve spegnersi mentre il lettore ti accompagna */
+async function lettoreWake() {
+  try { Lettore.wl = await navigator.wakeLock.request('screen'); } catch (e) { /* niente wake lock: pazienza */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') lettorePausa();
+  else if (Lettore.attivo) lettoreWake();
+});
+
+function lettoreSetVel(v) {
+  store.setSettings({ vista: { lettoreAuto: { spv: +v } } });
+  const chip = document.querySelector('#lettore-ui .lb-b.chip');
+  if (chip) chip.textContent = (+v) + 's';
+}
+function lettoreVelPop(e) { if (e) e.stopPropagation(); const p = $('#vel-pop'); if (p) p.hidden = !p.hidden; }
+
+/* la pausa lascia l'āya illuminata: un tocco e diventa il segnalibro */
+function lettoreSegna(e) {
+  if (e) e.stopPropagation();
+  if (!Lettore.idx) return;
+  const p = store._ayaDaIndice(Lettore.idx);
+  store.setBookmark(p.sura, p.aya);
+  renderLettura();
+  toast('⛿ Segnalibro su ' + store.fmtPos(p));
+}
+
+/* torna al segnalibro senza chiudere l'app: se è fuori dalla finestra
+   caricata, la ricarico attorno a lui — come fa l'avvio */
+async function vaiAlSegnalibro(e) {
+  if (e) e.stopPropagation();
+  const k = store.activeKhatam();
+  if (!k) { toast('Nessun khatam attivo'); return; }
+  const bm = Math.max(1, k.aya_id || 1);
+  const w = store.finestra();
+  const dentro = !store.suraInFinestra() && bm >= w.da && bm <= w.a;
+  Lettore.idx = 0;                     /* il play riparte dal segnalibro */
+  if (!dentro) await store.caricaAyat({ da: Math.max(1, bm - 3) });
+  renderLettura();
+  const el = document.querySelector(`[data-idx="${bm}"]`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function setLettore(m) {

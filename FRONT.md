@@ -142,3 +142,32 @@ Le funzioni esistenti (`list`, `get`, `add`, `toggle`, `lettura`, `khatam*`,
 Solo quando questi sette punti sono chiusi il front è «in grado di ricevere
 dati»: allora si scrive l'SQL, si testano i collegamenti, si pulisce e si
 importa.
+
+---
+
+## Lettura assistita (implementata 18 ago 2026)
+
+Il play in pagina Lettura avanza **per āya, non per pixel**: illumina un
+versetto (`.leggendo`), centra la vista, aspetta in proporzione alla lunghezza
+(secondi-per-versetto medio × parole/12, con minimo e tetto) e passa al
+successivo. Il ritmo si regola con un cursore (2–15s, salvato in
+`impostazioni.vista.lettoreAuto.spv`). Regole:
+
+- **qualsiasi tocco durante il play = solo pausa** (listener in capture:
+  nessun bottone scatta per sbaglio);
+- in pausa la barra offre **«⛿ segna qui»**: l'āya illuminata diventa il
+  segnalibro;
+- con un piano khatam attivo il play **si ferma da solo al traguardo del
+  giorno** (`pianoKhatam().target`);
+- wake lock durante il play; pausa automatica se la pagina va in background
+  o si naviga altrove;
+- il motore ritrova la sua riga via `data-idx` (indice globale 1–6236 =
+  `ayat.id`) dopo ogni re-render, e carica i versetti mancanti da solo
+  (serializzato con la sentinella via `lpInCorso`).
+
+La barra flottante (`#lettore-ui`, dentro `#p-lettura`) porta anche i salti
+rapidi: **↑ torna in cima** e **⛿ vai al segnalibro** — se il segnalibro è
+fuori dalla finestra caricata la ricarica attorno a lui (`caricaAyat`), senza
+riavviare l'app. Funziona in Flusso e in Pagina (gli span `.mv` hanno lo
+stesso `data-idx`). Un domani lo stesso motore si aggancia all'audio del
+qari: l'avanzamento per āya è già l'unità giusta.
