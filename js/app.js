@@ -262,6 +262,7 @@ function renderLettura() {
      undefined, e il segnalibro non si accendeva mai. */
   const bmIdx = active ? (active.aya_id || 0) : 0;
   const done = store.khatamDone();
+  aggiornaLettoreUi();   /* la barra vive su body, fuori dai re-render della pagina */
   let html = dayHeader('La lettura');
 
   /* pannello khatam: contatore + % + crea/ferma/elimina */
@@ -374,7 +375,6 @@ function renderLettura() {
     <span class="chip ${modo === 'flusso' ? 'sel' : ''}" onclick="setLettore('flusso')">📜 Flusso</span>
     <span class="chip ${modo === 'pagina' ? 'sel' : ''}" onclick="setLettore('pagina')">📖 Pagina</span>
   </div>`;
-  html += lettoreUiHtml();   /* barra flottante: su, segnalibro, play, ritmo */
   if (modo === 'pagina') {
     html += renderMushaf({ modo: 'lettura', bmIdx }) + bloccoContinua();
     $('#p-lettura').innerHTML = html; armaSentinella(); return;
@@ -539,10 +539,12 @@ async function caricaPiu() {
   lpInCorso = true;
   const btn = document.querySelector('#lp-sentinella button');
   if (btn) { btn.textContent = 'Carico…'; btn.disabled = true; }
-  const y = window.scrollY;                 /* i nuovi versetti si aggiungono in coda */
   const n = await store.caricaAncora();
   lpInCorso = false;
   if (!n) { if (btn) { btn.textContent = 'Niente altro'; } return; }
+  /* la posizione si legge DOPO il fetch: col joystick in corsa, nel frattempo
+     si è scesi ancora, e ripristinare quella vecchia farebbe saltare indietro */
+  const y = window.scrollY;                 /* i nuovi versetti si aggiungono in coda */
   const modo = (store.getSettings().vista.lettore) || 'flusso';
   modo === 'pagina' ? renderLettura() : renderLettura();
   window.scrollTo(0, y);                    /* si resta dove si stava leggendo */
@@ -570,31 +572,68 @@ function lettoreSpv() {
   const v = store.getSettings().vista || {};
   return (v.lettoreAuto && v.lettoreAuto.spv) || 5;
 }
+/* due modi di farsi accompagnare: joystick (il dito detta il passo)
+   o automatico a secondi (mani libere). Scelta salvata nelle impostazioni. */
+function lettoreModo() {
+  const v = store.getSettings().vista || {};
+  return (v.lettoreAuto && v.lettoreAuto.modo) || 'joystick';
+}
+function joyVelBase() {
+  const v = store.getSettings().vista || {};
+  return (v.lettoreAuto && v.lettoreAuto.vel) || 4;
+}
+function lettoreSetModo(m) {
+  lettorePausa();
+  store.setSettings({ vista: { lettoreAuto: { modo: m } } });
+  aggiornaLettoreUi();
+  const p = $('#vel-pop'); if (p) p.hidden = false;   /* il pannello resta aperto per regolare */
+}
 
-/* barra flottante + finestrina del ritmo. È position:fixed ma vive dentro
-   #p-lettura: quando la pagina non è `on`, sparisce da sola. */
+/* barra flottante + pannello del lettore. Vive su body, non dentro
+   #p-lettura: i re-render della pagina non le strappano il bottone
+   di mano (fondamentale col joystick tenuto premuto). */
 function lettoreUiHtml() {
   const on = Lettore.attivo;
+  const m = lettoreModo();
   const p = Lettore.idx ? store._ayaDaIndice(Lettore.idx) : null;
   const k = store.activeKhatam();
   const segnabile = !on && p && k && Lettore.idx !== (k.aya_id || 0);
+  const principale = m === 'joystick'
+    ? `<button class="lb-b play joy" title="Tieni premuto per scorrere — trascina giù/su per la velocità"
+        onpointerdown="joyStart(event)" onpointermove="joyMove(event)"
+        onpointerup="joyEnd(event)" onpointercancel="joyEnd(event)">⇕</button>`
+    : `<button class="lb-b play ${on ? 'on' : ''}" title="${on ? 'Pausa' : 'Lettura assistita'}" onclick="lettoreToggle(event)">${on ? '⏸' : '▶'}</button>`;
   return `<div id="lettore-ui">
     <div class="lettore-bar">
       <button class="lb-b" title="Torna in cima" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
       <button class="lb-b" title="Vai al segnalibro" onclick="vaiAlSegnalibro(event)">⛿</button>
-      <button class="lb-b play ${on ? 'on' : ''}" title="${on ? 'Pausa' : 'Lettura assistita'}" onclick="lettoreToggle(event)">${on ? '⏸' : '▶'}</button>
-      <button class="lb-b chip" title="Ritmo di lettura" onclick="lettoreVelPop(event)">${lettoreSpv()}s</button>
+      ${principale}
+      <button class="lb-b chip" title="Modalità e velocità" onclick="lettoreVelPop(event)">${m === 'joystick' ? '×' + joyVelBase() : lettoreSpv() + 's'}</button>
       ${segnabile ? `<button class="lb-b segna" title="Sposta il segnalibro su ${esc(store.fmtPos(p))}" onclick="lettoreSegna(event)">⛿ ${p.sura}:${p.aya}</button>` : ''}
     </div>
     <div class="vel-pop" id="vel-pop" hidden>
+      <div class="vp-modo">
+        <span class="chip ${m === 'joystick' ? 'sel' : ''}" onclick="lettoreSetModo('joystick')">🕹 Joystick</span>
+        <span class="chip ${m === 'auto' ? 'sel' : ''}" onclick="lettoreSetModo('auto')">▶ Automatico</span>
+      </div>
+      ${m === 'joystick' ? `
+      <div class="vp-t">Velocità di crociera: <b id="vel-val">×${joyVelBase()}</b></div>
+      <input type="range" min="1" max="10" step="0.5" value="${joyVelBase()}"
+        oninput="$('#vel-val').textContent='×'+this.value" onchange="lettoreSetVel(this.value)">
+      <div class="vp-s">Tieni premuto ⇕ e il testo scorre. Trascina in giù per accelerare, risali per frenare; sopra il punto di presa torni indietro. Lascia il dito e si ferma.</div>`
+      : `
       <div class="vp-t">Ritmo: <b id="vel-val">${lettoreSpv()}s</b> per un versetto medio</div>
-      <input type="range" min="2" max="15" step="0.5" value="${lettoreSpv()}"
+      <input type="range" min="2" max="20" step="0.5" value="${lettoreSpv()}"
         oninput="$('#vel-val').textContent=this.value+'s'" onchange="lettoreSetVel(this.value)">
-      <div class="vp-s">I versetti lunghi ricevono più tempo, i corti meno. Durante la lettura tocca ovunque per fermarti: resti sull'āya illuminata.</div>
+      <div class="vp-s">I versetti lunghi ricevono più tempo, senza tetto. Durante la lettura tocca ovunque per fermarti: resti sull'āya illuminata.</div>`}
     </div>
   </div>`;
 }
-function aggiornaLettoreUi() { const c = $('#lettore-ui'); if (c) c.outerHTML = lettoreUiHtml(); }
+function aggiornaLettoreUi() {
+  let host = document.getElementById('lettore-ui-host');
+  if (!host) { host = document.createElement('div'); host.id = 'lettore-ui-host'; document.body.appendChild(host); }
+  host.innerHTML = store.activeKhatam() ? lettoreUiHtml() : '';
+}
 
 function lettoreToggle(e) { if (e) e.stopPropagation(); Lettore.attivo ? lettorePausa() : lettorePlay(); }
 
@@ -646,8 +685,8 @@ async function lettoreStep() {
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const v = store.get('versetti', idx);      /* l'id delle ayat È l'indice globale */
   const parole = v && v.arabo ? v.arabo.trim().split(/\s+/).length : 12;
-  const spv = lettoreSpv();
-  const sec = Math.min(spv * 4, Math.max(2, spv * parole / 12));
+  /* niente tetto: un versetto lungo ha diritto a tutto il suo tempo */
+  const sec = Math.max(2.5, lettoreSpv() * parole / 12);
   Lettore.timer = setTimeout(lettoreAvanza, sec * 1000);
 }
 
@@ -679,11 +718,53 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function lettoreSetVel(v) {
-  store.setSettings({ vista: { lettoreAuto: { spv: +v } } });
+  const auto = lettoreModo() === 'auto';
+  store.setSettings({ vista: { lettoreAuto: auto ? { spv: +v } : { vel: +v } } });
   const chip = document.querySelector('#lettore-ui .lb-b.chip');
-  if (chip) chip.textContent = (+v) + 's';
+  if (chip) chip.textContent = auto ? (+v) + 's' : '×' + (+v);
 }
 function lettoreVelPop(e) { if (e) e.stopPropagation(); const p = $('#vel-pop'); if (p) p.hidden = !p.hidden; }
+
+/* ---- joystick: tieni premuto = scorri; giù accelera, su frena/indietro.
+   Il punto dove appoggi il dito è lo zero: la distanza da lì è la velocità. ---- */
+const Joy = { on: false, y0: 0, dy: 0, raf: null, last: 0, btn: null };
+function joyStart(e) {
+  e.preventDefault(); e.stopPropagation();
+  Joy.btn = e.currentTarget;
+  try { Joy.btn.setPointerCapture(e.pointerId); } catch (err) {}
+  Joy.on = true; Joy.y0 = e.clientY; Joy.dy = 0; Joy.last = 0;
+  Joy.btn.classList.add('grip');
+  Joy.raf = requestAnimationFrame(joyTick);
+}
+function joyMove(e) {
+  if (!Joy.on) return;
+  Joy.dy = e.clientY - Joy.y0;
+  const f = joyFattore();
+  Joy.btn.textContent = f < 0 ? '↺' : '×' + f.toFixed(1);
+}
+function joyEnd() {
+  if (!Joy.on) return;
+  Joy.on = false;
+  if (Joy.raf) { cancelAnimationFrame(Joy.raf); Joy.raf = null; }
+  Joy.btn.classList.remove('grip');
+  Joy.btn.textContent = '⇕';
+}
+/* fattore dal dito: ×1 allo zero, cresce scendendo (fino a ×8),
+   ×0 a 40px sopra lo zero, poi retromarcia dolce */
+function joyFattore() {
+  const dy = Joy.dy;
+  if (dy >= -40) return Math.min(8, 1 + dy / 40);
+  return Math.max(-1.5, (dy + 40) / 60);
+}
+function joyTick(ts) {
+  if (!Joy.on) return;
+  if (Joy.last) {
+    const dt = Math.min(0.1, (ts - Joy.last) / 1000);
+    window.scrollBy(0, joyVelBase() * 12 * joyFattore() * dt);
+  }
+  Joy.last = ts;
+  Joy.raf = requestAnimationFrame(joyTick);
+}
 
 /* la pausa lascia l'āya illuminata: un tocco e diventa il segnalibro */
 function lettoreSegna(e) {

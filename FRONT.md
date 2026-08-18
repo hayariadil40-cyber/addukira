@@ -145,13 +145,24 @@ importa.
 
 ---
 
-## Lettura assistita (implementata 18 ago 2026)
+## Lettura assistita (implementata 18 ago 2026, joystick 18 ago sera)
 
-Il play in pagina Lettura avanza **per āya, non per pixel**: illumina un
-versetto (`.leggendo`), centra la vista, aspetta in proporzione alla lunghezza
-(secondi-per-versetto medio × parole/12, con minimo e tetto) e passa al
-successivo. Il ritmo si regola con un cursore (2–15s, salvato in
-`impostazioni.vista.lettoreAuto.spv`). Regole:
+Due modalità, scelte dal pannello sul chip della barra (salvate in
+`impostazioni.vista.lettoreAuto.modo`, default `joystick`):
+
+**Joystick** (principale): tieni premuto ⇕ e il testo scorre alla velocità
+di crociera (`lettoreAuto.vel`, cursore 1–10); il punto di presa è lo zero —
+trascini in giù e accelera (fino a ×8), risali e frena, sopra lo zero
+retromarcia dolce, lasci e si ferma. Pointer events con `setPointerCapture`
++ `touch-action:none`. La barra vive in un host su `body`
+(`#lettore-ui-host`, visibile via `body.con-lettore`), NON dentro
+`#p-lettura`: i re-render della pagina (sentinella inclusa) non strappano
+il bottone tenuto premuto.
+
+**Automatico** (secondaria, per le mani libere): avanza **per āya, non per
+pixel** — illumina un versetto (`.leggendo`), centra la vista, aspetta in
+proporzione alla lunghezza (spv × parole/12, minimo 2.5s, **senza tetto**)
+e passa al successivo. Ritmo `lettoreAuto.spv`, cursore 2–20s. Regole:
 
 - **qualsiasi tocco durante il play = solo pausa** (listener in capture:
   nessun bottone scatta per sbaglio);
@@ -165,9 +176,11 @@ successivo. Il ritmo si regola con un cursore (2–15s, salvato in
   `ayat.id`) dopo ogni re-render, e carica i versetti mancanti da solo
   (serializzato con la sentinella via `lpInCorso`).
 
-La barra flottante (`#lettore-ui`, dentro `#p-lettura`) porta anche i salti
-rapidi: **↑ torna in cima** e **⛿ vai al segnalibro** — se il segnalibro è
-fuori dalla finestra caricata la ricarica attorno a lui (`caricaAyat`), senza
-riavviare l'app. Funziona in Flusso e in Pagina (gli span `.mv` hanno lo
-stesso `data-idx`). Un domani lo stesso motore si aggancia all'audio del
-qari: l'avanzamento per āya è già l'unità giusta.
+La barra flottante porta anche i salti rapidi: **↑ torna in cima** e
+**⛿ vai al segnalibro** — se il segnalibro è fuori dalla finestra caricata
+la ricarica attorno a lui (`caricaAyat`), senza riavviare l'app. Sta sopra
+la safe-area iPhone (`env(safe-area-inset-bottom)`, richiede
+`viewport-fit=cover` nella meta viewport) per non collidere con la barra
+di casa/Siri. Funziona in Flusso e in Pagina (gli span `.mv` hanno lo
+stesso `data-idx`). Un domani il motore per āya si aggancia all'audio del
+qari: è già l'unità giusta.

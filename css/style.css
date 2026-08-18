@@ -675,7 +675,11 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
   padding:22px;margin-top:14px;border-top:1px solid var(--line)}
 
 /* ---- lettura assistita: barra flottante, aya illuminata, ritmo ---- */
-.lettore-bar{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:25;display:flex;gap:7px;align-items:center;
+/* l'host sta su body: visibile solo quando la pagina attiva è Lettura */
+#lettore-ui-host{display:none}
+body.con-lettore #lettore-ui-host{display:block}
+/* sopra la safe-area dell'iPhone: mai a ridosso della barra di casa/Siri */
+.lettore-bar{position:fixed;bottom:calc(26px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:25;display:flex;gap:7px;align-items:center;
   background:var(--ink);padding:7px 9px;border-radius:999px;box-shadow:0 8px 26px rgba(15,30,26,.45)}
 .lb-b{background:transparent;border:1px solid var(--line-dk);color:var(--panel);border-radius:999px;min-width:38px;height:38px;
   padding:0 10px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -685,9 +689,12 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .lb-b.segna{color:var(--brass-lite);border-color:rgba(211,181,115,.5)}
 .aya-row.leggendo{background:rgba(211,181,115,.16);box-shadow:inset 3px 0 0 var(--brass);border-radius:8px}
 .mv.leggendo{background:linear-gradient(transparent 12%,rgba(211,181,115,.42) 12%);border-radius:4px}
-.vel-pop{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);z-index:26;background:var(--panel);color:var(--ink);
+.lb-b.joy{touch-action:none;user-select:none;-webkit-user-select:none;font-size:17px}
+.lb-b.joy.grip{background:var(--brass-lite);font-size:12.5px;font-weight:700}
+.vp-modo{display:flex;gap:8px;margin-bottom:10px}
+.vel-pop{position:fixed;bottom:calc(94px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:26;background:var(--panel);color:var(--ink);
   border:1px solid var(--line);border-radius:14px;padding:14px 16px;width:min(320px,86vw);box-shadow:0 12px 32px rgba(15,30,26,.35)}
 .vel-pop .vp-t{font-size:13px;margin-bottom:8px}
 .vel-pop input[type=range]{width:100%;accent-color:var(--brass)}
 .vel-pop .vp-s{font-size:11.5px;color:var(--ink-soft);margin-top:7px}
-body.con-lettore .toast{bottom:92px}
+body.con-lettore .toast{bottom:calc(100px + env(safe-area-inset-bottom,0px))}
