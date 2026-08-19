@@ -397,12 +397,14 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 .mz-range{font-size:12.5px;color:var(--brass);font-weight:500;margin-left:auto}
 .mz-page-head{font-family:'Spectral',serif;font-weight:600;font-size:16px;color:var(--ink);margin:20px 0 10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .mz-note{font-family:'Inter',sans-serif;font-weight:400;font-size:11px;color:var(--ink-soft);font-style:italic}
-.mz-aya{display:flex;gap:13px;align-items:flex-start;padding:13px 4px;border-bottom:1px solid var(--line)}
-.mz-aya.mem{opacity:.6}
-.mz-chk{width:26px;height:26px;flex:none;border:1.6px solid var(--brass);border-radius:7px;background:none;color:#fff;font-size:13px;cursor:pointer;margin-top:6px;display:flex;align-items:center;justify-content:center}
-.mz-aya.mem .mz-chk{background:var(--verify);border-color:var(--verify)}
-.mz-num{font-size:11px;color:var(--brass);font-weight:600;border:1px solid var(--line);border-radius:50%;width:34px;height:29px;display:flex;align-items:center;justify-content:center;flex:none;margin-top:5px}
-.mz-ar{flex:1;font-family:'Amiri',serif;font-size:24px;line-height:2.1;direction:rtl;text-align:right}
+/* la vista Versetti usa le stesse .aya-row della Lettura; qui solo
+   ciò che è suo: la ✓ che resta verde, la riga memorizzata che si quieta,
+   il "vai all'aya" evidenziato */
+.ab.mzk{color:var(--verify);font-weight:700}
+.ab.mzk.on,.ab.mzk.on:hover{background:var(--verify);border-color:var(--verify);color:#fff}
+.ab.mz-go{background:rgba(211,181,115,.28);border-color:var(--brass-lite)}
+.aya-row.mem .arq,.aya-row.mem .itq{opacity:.55}
+.aya-row.mem .num{background:var(--verify);border-color:var(--verify);color:#fff}
 
 /* ---------- pensieri ---------- */
 /* il rettangolo tratteggiato «aggiungi…»: uguale in tutte le pagine */
@@ -668,6 +670,22 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 @media(max-width:620px){.orari{grid-template-columns:repeat(3,1fr)}}
 .chip .ch-n{opacity:.65;font-size:10px;font-weight:500;margin-left:3px}
 
+/* ---- i colori del tajwīd: convenzione dei muṣḥaf Dar al-Maʿrifah,
+   tinte scurite quel tanto che serve per reggere sullo sfondo crema ---- */
+.tj.hw,.tj.sil,.tj.ls{color:#9a9a90}                                /* non si pronuncia */
+.tj.gn{color:#d97e14}                                               /* ghunnah */
+.tj.ig{color:#169777}.tj.ing{color:#2e9c3f}.tj.ish{color:#4ba100}   /* idghām */
+.tj.imj{color:#7b8e2a}.tj.imq{color:#4c9a6b}
+.tj.ik{color:#9400a8}.tj.iks{color:#d500b7}                          /* ikhfāʾ */
+.tj.iq{color:#0f9bd7}                                                /* iqlāb */
+.tj.q{color:#dd0008}                                                 /* qalqalah */
+.tj.m2{color:#537fff}.tj.m246{color:#4050e0}                          /* madd, dal chiaro allo scuro */
+.tj.mmf{color:#2144c1}.tj.mmt{color:#1b36a8}.tj.m6{color:#000ebc}
+.taj-legenda{margin:-4px 0 14px;font-size:12px;color:var(--ink-soft)}
+.taj-legenda summary{cursor:pointer;user-select:none;-webkit-user-select:none}
+.taj-legenda .tl-w{display:flex;flex-wrap:wrap;gap:5px 14px;padding:9px 2px}
+.taj-legenda .tl-w b{font-size:9px;vertical-align:1px;margin-right:2px}
+
 /* ---- il lettore continua: nessun muro in fondo alla finestra ---- */
 .carica-piu{display:flex;justify-content:center;padding:22px 0 8px}
 .carica-piu button{min-width:230px}
@@ -678,26 +696,26 @@ h1.t{font-family:'Spectral',serif;font-weight:600;font-size:29px;letter-spacing:
 /* l'host sta su body: visibile solo quando la pagina attiva è Lettura */
 #lettore-ui-host{display:none}
 body.con-lettore #lettore-ui-host{display:block}
-/* sopra la safe-area dell'iPhone: mai a ridosso della barra di casa/Siri */
-.lettore-bar{position:fixed;bottom:calc(26px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:25;display:flex;gap:7px;align-items:center;
-  background:var(--ink);padding:7px 9px;border-radius:999px;box-shadow:0 8px 26px rgba(15,30,26,.45)}
-.lb-b{background:transparent;border:1px solid var(--line-dk);color:var(--panel);border-radius:999px;min-width:38px;height:38px;
-  padding:0 10px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.lb-b.play{background:var(--brass);border-color:var(--brass);color:#0f1e1a;min-width:46px;height:46px;font-size:16px}
+/* a destra, a un terzo dello schermo dal fondo: il pollice ci arriva
+   senza piegarsi e non copre il testo mentre si scorre col joystick */
+.lettore-bar{position:fixed;bottom:33vh;right:calc(10px + env(safe-area-inset-right,0px));z-index:25;display:flex;gap:7px;align-items:center;
+  background:var(--ink);padding:8px 10px;border-radius:999px;box-shadow:0 8px 26px rgba(15,30,26,.45)}
+.lb-b{background:transparent;border:1px solid var(--line-dk);color:var(--panel);border-radius:999px;min-width:44px;height:44px;
+  padding:0 11px;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.lb-b.play{background:var(--brass);border-color:var(--brass);color:#0f1e1a;min-width:54px;height:54px;font-size:18px}
 .lb-b.play.on{background:var(--brass-lite)}
-.lb-b.chip,.lb-b.segna{font-size:12.5px;font-weight:600}
+.lb-b.chip,.lb-b.segna{font-size:13.5px;font-weight:600}
 .lb-b.segna{color:var(--brass-lite);border-color:rgba(211,181,115,.5)}
 .aya-row.leggendo{background:rgba(211,181,115,.16);box-shadow:inset 3px 0 0 var(--brass);border-radius:8px}
 .mv.leggendo{background:linear-gradient(transparent 12%,rgba(211,181,115,.42) 12%);border-radius:4px}
-.lb-b.joy{touch-action:none;user-select:none;-webkit-user-select:none;font-size:17px}
-.lb-b.joy.grip{background:var(--brass-lite);font-size:12.5px;font-weight:700}
+.lb-b.joy{touch-action:none;user-select:none;-webkit-user-select:none;font-size:19px}
+.lb-b.joy.grip{background:var(--brass-lite);font-size:13.5px;font-weight:700}
 .vp-modo{display:flex;gap:8px;margin-bottom:10px}
-.vel-pop{position:fixed;bottom:calc(94px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:26;background:var(--panel);color:var(--ink);
+.vel-pop{position:fixed;bottom:calc(33vh + 78px);right:calc(10px + env(safe-area-inset-right,0px));z-index:26;background:var(--panel);color:var(--ink);
   border:1px solid var(--line);border-radius:14px;padding:14px 16px;width:min(320px,86vw);box-shadow:0 12px 32px rgba(15,30,26,.35)}
 .vel-pop .vp-t{font-size:13px;margin-bottom:8px}
 .vel-pop input[type=range]{width:100%;accent-color:var(--brass)}
 .vel-pop .vp-s{font-size:11.5px;color:var(--ink-soft);margin-top:7px}
-body.con-lettore .toast{bottom:calc(100px + env(safe-area-inset-bottom,0px))}
 
 /* ---- recitazione (hifz): la barra audio della memorizzazione ---- */
 .rec-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:var(--panel-2);border:1px solid var(--line);
@@ -709,9 +727,6 @@ body.con-lettore .toast{bottom:calc(100px + env(safe-area-inset-bottom,0px))}
 .rb-b.loop.on{border-color:var(--brass);color:var(--brass);font-weight:700}
 .rb-rip{display:flex;gap:5px}
 .rb-pos{margin-left:auto;font-size:12px;color:var(--ink-soft)}
-.mz-aya.leggendo{background:rgba(211,181,115,.16);box-shadow:inset 3px 0 0 var(--brass);border-radius:8px}
-.mz-play{background:transparent;border:1px solid var(--line);border-radius:999px;width:30px;height:30px;cursor:pointer;
-  color:var(--brass);flex:none;font-size:11px}
 
 /* ---- piani di memorizzazione multipli ---- */
 .kh-col{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0}

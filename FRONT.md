@@ -178,11 +178,14 @@ e passa al successivo. Ritmo `lettoreAuto.spv`, cursore 2–20s. Regole:
 
 La barra flottante porta anche i salti rapidi: **↑ torna in cima** e
 **⛿ vai al segnalibro** — se il segnalibro è fuori dalla finestra caricata
-la ricarica attorno a lui (`caricaAyat`), senza riavviare l'app. Sta sopra
-la safe-area iPhone (`env(safe-area-inset-bottom)`, richiede
-`viewport-fit=cover` nella meta viewport) per non collidere con la barra
-di casa/Siri. Funziona in Flusso e in Pagina (gli span `.mv` hanno lo
-stesso `data-idx`). Un domani il motore per āya si aggancia all'audio del
+la ricarica attorno a lui (`caricaAyat`), senza riavviare l'app. Sta **a
+destra, a un terzo dello schermo dal fondo** (`bottom:33vh` +
+`env(safe-area-inset-right)` per il landscape): scelta ergonomica di Adil
+(19 ago 2026) — il pollice tiene il joystick senza indolenzirsi e la barra
+non intralcia lo scorrimento; niente più collisione con la barra di
+casa/Siri né col toast. Il pannello velocità (`.vel-pop`) le sta appena
+sopra, stesso allineamento a destra. Funziona in Flusso e in Pagina (gli
+span `.mv` hanno lo stesso `data-idx`). Un domani il motore per āya si aggancia all'audio del
 qari: è già l'unità giusta.
 
 ---
@@ -208,6 +211,29 @@ un piano che raggiunge la sua meta passa da solo a `completato` (con
 `completato_il`), festa nel toast e riga nello storico «Completati» con
 durata, ritmo e anticipo/ritardo (`durataPianoMem`). Sospesi e completati
 sono sempre visibili in fondo alla pagina.
+
+**Testo di studio in due viste** (`impostazioni.vista.memorizzatore`,
+tab «📖 Pagina / ☰ Versetti», valore salvato `pagina`/`lista`): la Pagina
+è il muṣḥaf continuo (`renderMushaf` modo `memoria`, tocca il testo per
+segnare); la vista Versetti — richiesta di Adil, 19 ago 2026: la checklist
+non gli piaceva — usa le **stesse `.aya-row` della Lettura** (numero,
+arabo, traduzione, separatori di sura) con i comandi di fianco: **⋯ vai
+all'aya** (evidenziato, apre la scheda), **🖊 evidenzia** (condivisa con
+la Lettura, stesso `toggleHl`), **✓ memorizzata** (verde `--verify`,
+persiste in `memorizzazione`), **▶ ascolta da qui** (`recPlay`). La riga
+memorizzata si quieta (testo al 55%, cerchio del numero verde).
+
+**Colori del tajwīd (19 ago 2026):** chip «🎨 Tajwīd» accanto ai tab di
+Lettura e Memorizzazione (`impostazioni.vista.tajwid`, default acceso) con
+legenda richiudibile (`<details class="taj-legenda">`). Il renderer è
+`arTaj(v)` (app.js): affetta `v.arabo` per codepoint sugli intervalli di
+`ayat.tajweed` (forma compatta `[[codice,da,a],…]`, vedi SCHEMA.md) e veste
+ogni intervallo di `<span class="tj <codice>">`; se il dato manca o è nel
+vecchio formato, degrada al testo semplice. Colora Flusso, Pagina muṣḥaf
+e la vista Versetti della Memorizzazione (la scheda del versetto no, per
+ora). I browser mantengono le legature arabe attraverso gli span. Colori
+in style.css (`.tj.*`), convenzione Dar al-Maʿrifah scurita per lo sfondo
+crema.
 
 **Recitazione (Ḥuṣarī):** barra audio (`recUiHtml`) sopra il testo di
 studio — ▶/⏸, ⏮ ⏭, ripetizioni ×1/×3/×5/×10 per āya, 🔁 loop sul passo.

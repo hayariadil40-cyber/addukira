@@ -137,18 +137,33 @@ Con Ḥafṣ esiste tutto, pronto e allineato:
 | 604 pagine, font QCF | Quranpedia distribuisce font e immagini di pagina |
 | **tajwīd annotato** | `cpfair/quran-tajweed` — 19 regole con indici di carattere |
 
-### `tajweed` — come si colora il testo
+### `tajweed` — come si colora il testo (rimappato il 2026-08-19)
 
-Il dataset dà, per ogni aya, gli intervalli esatti di codepoint:
+Forma compatta, un array per aya: `[[codice, da, a], …]` con gli offset in
+**codepoint dentro il nostro `testo_ar`** (estremo destro escluso).
 
 ```json
-[ { "rule": "madd_6", "start": 245, "end": 247 },
-  { "rule": "ikhfa",  "start": 12,  "end": 14  } ]
+[ ["m6", 245, 247], ["ik", 12, 14] ]
 ```
 
-Colorare diventa applicare gli intervalli al testo: nessun calcolo di regole
-lato nostro. **Gli offset sono ancorati al testo Uthmani di Tanzil**: se un
-giorno si cambia edizione del testo, le annotazioni vanno riallineate.
+Codici → regola: `gn` ghunnah · `hw` hamzat al-waṣl · `ig`/`ing` idghām
+con/senza ghunnah · `imj`/`imq` idghām mutajānisayn/mutaqāribayn ·
+`ish` idghām shafawī · `ik`/`iks` ikhfāʾ (shafawī) · `iq` iqlāb ·
+`ls` lām shamsiyyah · `m2`/`m246`/`m6`/`mmf`/`mmt` i madd ·
+`q` qalqalah · `sil` lettera muta. (La mappa vive in `TAJ_NOMI`, app.js.)
+
+**Storia dell'allineamento.** Gli offset originali di `cpfair/quran-tajweed`
+erano ancorati al testo Tanzil del 2017; il nostro `testo_ar` (Tanzil
+attuale) ha in più i segni di pausa (ۖ ۗ ۚ …), ۞, ۩ e le meem piccole di
+iqlāb — **solo inserzioni**, nessuna sostituzione. Il 2026-08-19 gli offset
+sono stati rimappati con allineamento carattere per carattere e validati
+tutti (60 057 annotazioni: hamzat_wasl→ٱ, lam_shamsiyyah→ل,
+qalqalah→ق ط ب ج د; 0 errori). I segni combinanti inseriti a fine
+intervallo restano DENTRO l'intervallo, o si staccherebbero dalla lettera.
+
+La fonte canonica rimappata è **`data/tajweed.json` nel repo** (compatta,
+chiave = `ayat.id`): da lì si reimporta con un UPDATE se mai servisse.
+Se si cambia edizione del testo, si riparte dall'allineamento.
 
 Sta in JSONB dentro `ayat` invece che in tabella propria perché si legge
 sempre e solo insieme alla sua aya, e sono pochi intervalli per riga. Se un

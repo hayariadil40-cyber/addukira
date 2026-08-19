@@ -375,7 +375,8 @@ function renderLettura() {
   html += `<div class="lettore-tab">
     <span class="chip ${modo === 'flusso' ? 'sel' : ''}" onclick="setLettore('flusso')">📜 Flusso</span>
     <span class="chip ${modo === 'pagina' ? 'sel' : ''}" onclick="setLettore('pagina')">📖 Pagina</span>
-  </div>`;
+    ${tajChip('renderLettura()')}
+  </div>` + tajLegenda();
   if (modo === 'pagina') {
     html += renderMushaf({ modo: 'lettura', bmIdx }) + bloccoContinua();
     $('#p-lettura').innerHTML = html; armaSentinella(); return;
@@ -417,7 +418,7 @@ function renderLettura() {
     if (isBm) html += `<div class="marker">⛿ il tuo segnalibro · ${s.numero}:${v.aya}</div>`;
     /* qui si legge e basta: contesto, accadimenti e pensieri stanno nella scheda del versetto */
     html += `<div class="aya-row ${isHl ? 'hl' : ''}${Lettore.idx === idx ? ' leggendo' : ''}" data-idx="${idx}"><div class="num">${v.aya}</div>
-    <div class="tx"><div class="arq">${esc(v.arabo)}</div><div class="itq">${esc(v.it)}</div></div>
+    <div class="tx"><div class="arq">${arTaj(v)}</div><div class="itq">${esc(v.it)}</div></div>
     <div class="act">
       <button class="ab bm ${isBm ? 'on' : ''}" aria-pressed="${isBm}" title="${isBm ? 'Il segnalibro è qui' : 'Metti il segnalibro'}" onclick="store.setBookmark(${v.sura_id},${v.aya});renderLettura();toast('Segnalibro su ${s.numero}:${v.aya}')">⛿</button>
       <button class="ab hlb ${isHl ? 'on' : ''}" aria-pressed="${isHl}" title="${isHl ? 'Togli evidenziazione' : 'Evidenzia'}" onclick="store.toggleHl(${v.sura_id},${v.aya});renderLettura()">🖊</button>
@@ -474,6 +475,43 @@ async function apriAya(sid, aya) {
    frecce; oggi rende tutto ciò che è caricato. */
 const cifreArabe = n => String(n).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[+d]);
 
+/* ---- colori del tajwīd ----
+   Gli intervalli vivono in ayat.tajweed, forma compatta [[codice,da,a],…],
+   con gli offset in codepoint ancorati al NOSTRO testo_ar (rimappati e
+   verificati il 19 ago 2026 — vedi SCHEMA.md). Qui si affetta il testo
+   e ogni intervallo si veste della sua classe. */
+const TAJ_NOMI = {
+  gn: 'ghunnah', hw: 'hamzat al-waṣl', ig: 'idghām con ghunnah',
+  imj: 'idghām mutajānisayn', imq: 'idghām mutaqāribayn', ing: 'idghām senza ghunnah',
+  ish: 'idghām shafawī', ik: 'ikhfāʾ', iks: 'ikhfāʾ shafawī', iq: 'iqlāb',
+  ls: 'lām shamsiyyah', m2: 'madd naturale (2)', m246: 'madd ʿāriḍ (2-4-6)',
+  m6: 'madd lāzim (6)', mmf: 'madd munfaṣil (4-5)', mmt: 'madd muttaṣil (4-5)',
+  q: 'qalqalah', sil: 'lettera muta',
+};
+const tajwidOn = () => (store.getSettings().vista || {}).tajwid !== false;
+function arTaj(v) {
+  const ann = v.tajweed;
+  if (!tajwidOn() || !Array.isArray(ann) || !ann.length || !Array.isArray(ann[0])) return esc(v.arabo);
+  const t = [...v.arabo];          /* codepoint, non unità UTF-16 */
+  let h = '', p = 0;
+  for (const [c, s, e] of ann) {
+    const da = Math.max(s, p);     /* le rare sovrapposizioni: vince chi arriva prima */
+    if (da >= e || e > t.length) continue;
+    h += esc(t.slice(p, da).join('')) +
+      `<span class="tj ${c}" title="${TAJ_NOMI[c] || c}">` + esc(t.slice(da, e).join('')) + '</span>';
+    p = e;
+  }
+  return h + esc(t.slice(p).join(''));
+}
+const tajChip = ricarica => `<span class="chip ${tajwidOn() ? 'sel' : ''}"
+  onclick="store.setSettings({vista:{tajwid:${!tajwidOn()}}});${ricarica}">🎨 Tajwīd</span>`;
+function tajLegenda() {
+  if (!tajwidOn()) return '';
+  return `<details class="taj-legenda"><summary>i colori del tajwīd</summary><div class="tl-w">${
+    Object.keys(TAJ_NOMI).map(c => `<span><b class="tj ${c}">⬤</b> ${TAJ_NOMI[c]}</span>`).join('')
+  }</div></details>`;
+}
+
 /* cfg.modo: 'lettura' (segnalibro, click = scheda) | 'memoria' (click = memorizzato) */
 function renderMushaf(cfg) {
   const ayat = store.list('ayat_demo');
@@ -508,7 +546,7 @@ function renderMushaf(cfg) {
       tit = `${s.numero}:${v.aya} — apri la scheda`;
       dataIdx = ` data-idx="${idx}"`;
     }
-    h += `<span class="mv ${cls}"${dataIdx} ${mem ? `onclick="${click}" title="${tit}"` : ''}>${esc(v.arabo)}</span><span class="mv-n" title="${tit}" onclick="${click}">۝${cifreArabe(v.aya)}</span> `;
+    h += `<span class="mv ${cls}"${dataIdx} ${mem ? `onclick="${click}" title="${tit}"` : ''}>${arTaj(v)}</span><span class="mv-n" title="${tit}" onclick="${click}">۝${cifreArabe(v.aya)}</span> `;
   });
   if (aperto) h += `</div><div class="mushaf-foot">${lastPag(lastSura)}</div></div>`;
 
@@ -517,7 +555,7 @@ function renderMushaf(cfg) {
   h += `<div class="mushaf-note">La vera impaginazione del muṣḥaf — 604 pagine, ognuna che finisce
     sempre dove deve — arriva con l'import: serve <b>ayat.pagina</b>, che dice quale versetto sta su
     quale pagina. Da allora questa vista mostrerà una pagina per volta${mem
-      ? ' — ed è quella la forma che conta per la ḥifẓ: si memorizza la <b>posizione</b> sulla pagina, non solo le parole' : ', e i colori del tajwīd'}.</div>`;
+      ? ' — ed è quella la forma che conta per la ḥifẓ: si memorizza la <b>posizione</b> sulla pagina, non solo le parole' : ''}.</div>`;
   return h;
 }
 const lastPag = sid => { const s = store.get('sure', sid); return s ? `سورة ${esc(s.nome_arabo)}` : ''; };
@@ -1154,20 +1192,39 @@ function renderMemorizzazione() {
   html += `<div class="mz-page-head">${testa}</div>`;
   html += `<div class="lettore-tab">
     <span class="chip ${mzModo === 'pagina' ? 'sel' : ''}" onclick="setMemVista('pagina')">📖 Pagina</span>
-    <span class="chip ${mzModo === 'lista' ? 'sel' : ''}" onclick="setMemVista('lista')">☑ Lista</span>
-  </div>`;
+    <span class="chip ${mzModo === 'lista' ? 'sel' : ''}" onclick="setMemVista('lista')">☰ Versetti</span>
+    ${tajChip('renderMemorizzazione()')}
+  </div>` + tajLegenda();
   html += recUiHtml();   /* la voce di Ḥuṣarī sul passo caricato */
 
   if (mzModo === 'pagina') {
     html += renderMushaf({ modo: 'memoria' });
   } else {
-    html += store.list('ayat_demo').map(v => {
-      const s = suraOf(v.sura_id); const isM = store.isMem(v.sura_id, v.aya);
-      return `<div class="mz-aya ${isM ? 'mem' : ''}${Rec.on && Rec.id === v.id ? ' leggendo' : ''}" data-idx="${v.id}">
-        <button class="mz-chk" title="Segna come memorizzato" onclick="store.toggleMem(${v.sura_id},${v.aya});renderMemorizzazione()">${isM ? '✓' : ''}</button>
-        <button class="mz-play" title="Ascolta da qui" onclick="recPlay(${v.id})">▶</button>
-        <div class="mz-num">${s ? s.numero : ''}:${v.aya}</div>
-        <div class="mz-ar">${esc(v.arabo)}</div></div>`;
+    /* stesse righe della Lettura (numero, arabo, traduzione): la checklist
+       non piaceva. I comandi stanno di fianco: vai all'aya, evidenzia,
+       ✓ memorizzata (resta salvata), ▶ ascolta. */
+    const righe = store.list('ayat_demo');
+    const nMem = righe.filter(v => store.isMem(v.sura_id, v.aya)).length;
+    html += `<div class="mem-conta">${nMem} di ${righe.length} versetti memorizzati qui · la ✓ resta segnata</div>`;
+    let lastSura = null;
+    html += righe.map(v => {
+      const s = suraOf(v.sura_id);
+      const isM = store.isMem(v.sura_id, v.aya);
+      const isHl = store.isHl(v.sura_id, v.aya);
+      let sep = '';
+      if (v.sura_id !== lastSura) {
+        lastSura = v.sura_id;
+        sep = `<div class="sura-sep">Sura ${s.numero} · ${s.translit} · ${s.nome_arabo}</div>`;
+      }
+      return sep + `<div class="aya-row ${isM ? 'mem' : ''}${isHl ? ' hl' : ''}${Rec.on && Rec.id === v.id ? ' leggendo' : ''}" data-idx="${v.id}">
+        <div class="num">${v.aya}</div>
+        <div class="tx"><div class="arq">${arTaj(v)}</div><div class="itq">${esc(v.it || '')}</div></div>
+        <div class="act">
+          <button class="ab go-aya mz-go" title="Vai all'aya — la sua scheda con contesto e pensieri" onclick="apriAya(${v.sura_id},${v.aya})">⋯</button>
+          <button class="ab hlb ${isHl ? 'on' : ''}" aria-pressed="${isHl}" title="${isHl ? 'Togli evidenziazione' : 'Evidenzia'}" onclick="store.toggleHl(${v.sura_id},${v.aya});renderMemorizzazione()">🖊</button>
+          <button class="ab mzk ${isM ? 'on' : ''}" aria-pressed="${isM}" title="${isM ? 'Memorizzata — tocca per togliere' : 'Segna come memorizzata'}" onclick="store.toggleMem(${v.sura_id},${v.aya});renderMemorizzazione()">✓</button>
+          <button class="ab" title="Ascolta da qui (Ḥuṣarī)" onclick="recPlay(${v.id})">▶</button>
+        </div></div>`;
     }).join('');
   }
 
