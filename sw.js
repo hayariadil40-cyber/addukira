@@ -2,7 +2,7 @@
    In sviluppo prende sempre i file freschi dal server; la cache serve
    solo come rete di sicurezza quando si è offline.
    Si attiva solo se l'app è servita via http(s). */
-const CACHE = 'addukira-v5';
+const CACHE = 'addukira-v6';
 const SHELL = ['./', './index.html', './css/style.css',
   './js/supabase-config.js', './js/auth.js', './js/store.js', './js/i18n.js',
   './js/widgets.js', './js/app.js', './manifest.webmanifest',
@@ -22,6 +22,11 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  /* l'audio della recitazione passa dritto al browser: le risposte
+     opache in Cache Storage contano ~7MB l'una di quota, e l'ascolto
+     continuo la farebbe esplodere. La cache HTTP normale basta. */
+  const host = new URL(e.request.url).hostname;
+  if (host === 'cdn.islamic.network' || host === 'everyayah.com') return;
   e.respondWith(
     fetch(e.request).then(res => {
       const copy = res.clone();

@@ -858,6 +858,24 @@ const store = (() => {
       return righe;
     },
 
+    /* testi per la pagina Ascolto: finestra sua, per indice globale.
+       NON tocca DB.ayat né la finestra della Lettura: il player legge
+       questi e le altre pagine non si accorgono di nulla. */
+    async testiAyat(da, a) {
+      da = Math.max(1, +da || 1); a = Math.max(da, Math.min(TOTALE_AYA, +a || da));
+      const { data, error } = await sb.from('ayat')
+        .select('id,sura,numero,testo_ar').gte('id', da).lte('id', a).order('id');
+      if (error || !data) return [];
+      const righe = data.map(x => ({ id: x.id, sura: x.sura, aya: x.numero, arabo: x.testo_ar, it: '' }));
+      if (righe.length) {
+        const { data: tr } = await sb.from('ayat_traduzioni').select('aya_id,testo')
+          .in('aya_id', righe.map(r => r.id)).eq('lang', 'it');
+        const mappa = {}; (tr || []).forEach(t => { mappa[t.aya_id] = t.testo; });
+        righe.forEach(r => { r.it = mappa[r.id] || ''; });
+      }
+      return righe;
+    },
+
     /* ---- khatam ---- */
     khatamList: () => DB.khatam,
     activeKhatam: () => DB.khatam.find(k => k.stato === 'attivo'),

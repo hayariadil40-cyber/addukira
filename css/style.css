@@ -728,6 +728,46 @@ body.con-lettore #lettore-ui-host{display:block}
 .rb-rip{display:flex;gap:5px}
 .rb-pos{margin-left:auto;font-size:12px;color:var(--ink-soft)}
 
+/* ---- Ascolto: il lettore musicale del Corano ---- */
+.lnk-sub{margin-inline-start:22px;font-size:13px;padding-block:6px}
+.lnk-sub .e{font-size:12.5px}
+.pl-card{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:16px}
+.pl-sura{font-family:'Spectral',serif;font-weight:600;font-size:21px}
+.pl-pos{color:var(--ink-soft);font-size:13px;font-family:'Inter',sans-serif;font-weight:400;margin-inline-start:7px}
+.pl-range-lbl{color:var(--ink-soft);font-size:12px;margin:3px 0 9px}
+.pl-seek{width:100%;accent-color:var(--brass);cursor:pointer}
+.pl-ctrl{display:flex;align-items:center;justify-content:center;gap:10px;margin:12px 0 10px}
+.pl-opts{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap}
+.pl-opts .chip{margin:0 2px}
+.pl-testo{margin-top:13px;border-top:1px solid var(--line);padding-top:11px}
+.pl-ar{font-family:'Amiri',serif;font-size:23px;line-height:2;text-align:start}
+.pl-it{color:var(--ink-soft);font-size:13.5px;margin-top:6px;line-height:1.55}
+.pl-form{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:12px;padding:11px 14px;margin-bottom:16px}
+.pl-f{display:flex;align-items:center;gap:7px}
+.pl-f label{font-size:12px;color:var(--ink-soft);font-weight:600}
+.pl-f select,.pl-f input{font-family:inherit;font-size:13px;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.pl-f input[type=number]{width:62px}
+.pl-list{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2)}
+.pl-row{display:flex;align-items:center;gap:11px;padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;transition:.13s}
+.pl-row:last-child{border-bottom:0}
+.pl-row:hover{background:rgba(176,141,70,.08)}
+.pl-row.playing{background:rgba(176,141,70,.14)}
+.pl-n{width:26px;text-align:center;font-size:11.5px;color:var(--ink-soft);flex:none}
+.pl-nome{font-weight:500;font-size:14px}
+.pl-vv{margin-inline-start:auto;font-size:11.5px;color:var(--ink-soft)}
+.pl-go{width:22px;text-align:center;font-size:12px;color:var(--brass);flex:none}
+/* la mini-barra fuori dalla pagina: si continua ad ascoltare girando per l'app */
+.pl-mini{position:fixed;bottom:18px;inset-inline-start:50%;transform:translateX(-50%);z-index:55;
+  display:flex;align-items:center;gap:9px;background:var(--ink);color:var(--panel);
+  border-radius:999px;padding:8px 9px 8px 15px;font-size:13px;cursor:pointer;
+  box-shadow:0 10px 26px rgba(15,30,26,.4)}
+[dir=rtl] .pl-mini{transform:translateX(50%)}
+.pl-mini .pm-pos{font-weight:500}
+.pl-mini .pm-b{border:0;background:var(--brass);color:#0f1e1a;border-radius:999px;width:30px;height:30px;
+  cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center}
+
 /* ---- piani di memorizzazione multipli ---- */
 .kh-col{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0}
 .mz-piano{cursor:default}

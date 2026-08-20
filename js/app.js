@@ -32,14 +32,19 @@ const suraOf = id => store.get('sure', id);
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2100); }
 
 /* ---- navigazione ---- */
-const PAGES = ['oggi', 'lettura', 'memorizzazione', 'pensieri', 'allah', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'azioni', 'segni_ora', 'creazione', 'luoghi', 'impostazioni', 'search', 'detail'];
+const PAGES = ['oggi', 'lettura', 'memorizzazione', 'ascolto', 'pensieri', 'allah', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'azioni', 'segni_ora', 'creazione', 'luoghi', 'impostazioni', 'search', 'detail'];
+let paginaAttiva = 'oggi';
 function show(p) {
   PAGES.forEach(x => $('#p-' + x).classList.remove('on')); $('#p-' + p).classList.add('on'); window.scrollTo(0, 0);
+  paginaAttiva = p;
   /* la barra del lettore vive solo in Lettura: altrove il play si ferma
      e il toast torna al suo posto in basso */
   document.body.classList.toggle('con-lettore', p === 'lettura');
   if (p !== 'lettura') lettorePausa();
   if (p !== 'memorizzazione') recNavPausa();
+  /* il Player invece NON si ferma: è un lettore musicale.
+     Fuori dalla sua pagina resta la mini-barra. */
+  plMini();
 }
 function nav(p) {
   if (p !== 'detail' && p !== 'search') backTo = p;   /* il dettaglio torna da dove sei venuto */
@@ -1370,6 +1375,7 @@ function aggiornaRecUi() {
 }
 function recToggle() {
   if (Rec.on) { Rec.on = false; recAudio().pause(); aggiornaRecUi(); return; }
+  plPausa();                                    /* una voce alla volta */
   const a = recAudio();
   if (Rec.id && a.src && a.currentTime > 0 && !a.ended) {   /* riprende a metà āya */
     Rec.on = true; a.play().catch(() => recStop('Audio non disponibile')); aggiornaRecUi(); return;
@@ -1377,6 +1383,7 @@ function recToggle() {
   recPlay(Rec.id || 0);
 }
 function recPlay(id) {
+  plPausa();                                    /* una voce alla volta */
   const ids = recIds();
   if (!ids.length) { toast('Carica prima un passo da studiare'); return; }
   Rec.id = ids.includes(+id) ? +id : ids[0];
@@ -1425,6 +1432,285 @@ function recSetRip(n) { Rec.rip = n; Rec.ripFatte = 0; aggiornaRecUi(); }
 function recSetLoop() { Rec.loop = !Rec.loop; aggiornaRecUi(); }
 /* cambiando pagina la voce si ferma: si riprende da dov'era con ▶ */
 function recNavPausa() { if (Rec.on) { Rec.on = false; if (Rec.audio) Rec.audio.pause(); } }
+
+/* ============================================================
+   ASCOLTO — il Corano come in un lettore musicale: scegli una
+   sura o un intervallo e la voce scorre da sola, āya dopo āya,
+   anche a schermo spento (Media Session) e mentre giri per
+   l'app (mini-barra). È un motore SEPARATO da Rec: quello serve
+   la ḥifẓ (ripetizioni sul passo), questo l'ascolto continuo.
+   Stessi file audio: l'id globale 1–6236 è il nome del file.
+   ============================================================ */
+const Player = {
+  on: false, id: 0, da: 0, a: 0, vel: 1, loop: false,
+  riserva: false, audio: null, pre: null, testi: {}, salvati: 0,
+};
+function plAudio() {
+  if (!Player.audio) {
+    const a = new Audio();
+    a.preload = 'auto';
+    a.setAttribute('playsinline', '');
+    a.onended = plEnded;
+    a.onerror = plErrore;
+    Player.audio = a;
+  }
+  return Player.audio;
+}
+/* stato salvato → Player, la prima volta che serve */
+function plRipristina() {
+  if (Player.da) return;
+  const c = (store.getSettings().audio || {}).ascolto || {};
+  Player.da = Math.max(1, +c.da || 1);
+  Player.a = Math.min(fineCoranoIdx(), Math.max(Player.da, +c.a || store._ayaIndex(1, 7)));
+  Player.id = Math.max(Player.da, Math.min(Player.a, +c.id || Player.da));
+  Player.vel = +c.vel || 1;
+  Player.loop = !!c.loop;
+}
+function plSalva() {
+  store.setSettings({ audio: { ascolto: { da: Player.da, a: Player.a, id: Player.id, vel: Player.vel, loop: Player.loop } } });
+}
+/* durante il play si salva ogni 10 āyāt, non a ogni file */
+function plSalvaOgniTanto() { if (++Player.salvati % 10 === 0) plSalva(); }
+
+function plToggle() {
+  plRipristina();
+  if (Player.on) { plPausa(); return; }
+  recNavPausa();                                /* una voce alla volta */
+  const a = plAudio();
+  if (Player.id && a.src && a.currentTime > 0 && !a.ended) {   /* riprende a metà āya */
+    Player.on = true; a.playbackRate = Player.vel;
+    a.play().catch(() => plStop('Audio non disponibile'));
+    plStato(); plUi(); return;
+  }
+  plGioca(Player.id || Player.da);
+}
+function plGioca(id) {
+  plRipristina();
+  recNavPausa();
+  Player.id = Math.max(Player.da, Math.min(Player.a, +id || Player.da));
+  Player.on = true; Player.riserva = false;
+  plCarica();
+}
+function plCarica() {
+  const a = plAudio();
+  a.src = Player.riserva ? store.audioUrlAyaRiserva(Player.id) : store.audioUrlAya(Player.id);
+  a.playbackRate = Player.vel;
+  a.play().catch(() => { if (Player.on) plErrore(); });
+  if (!Player.riserva && Player.id < Player.a) {   /* scalda la cache per la prossima */
+    if (!Player.pre) { Player.pre = new Audio(); Player.pre.preload = 'auto'; }
+    Player.pre.src = store.audioUrlAya(Player.id + 1);
+  }
+  plTesti();
+  plMediaSession();
+  plUi();
+}
+function plEnded() {
+  if (!Player.on) return;
+  if (Player.id < Player.a) { Player.id++; Player.riserva = false; plSalvaOgniTanto(); plCarica(); }
+  else if (Player.loop) { Player.id = Player.da; Player.riserva = false; plCarica(); }
+  else plStop('Fine dell’ascolto ۩');
+}
+function plErrore() {
+  if (!Player.on) return;
+  if (!Player.riserva) { Player.riserva = true; plCarica(); }   /* stessa voce, CDN di riserva */
+  else plStop('Audio non raggiungibile — controlla la connessione');
+}
+function plPausa() {
+  if (!Player.on) return;
+  Player.on = false;
+  if (Player.audio) Player.audio.pause();
+  plSalva(); plStato(); plUi();
+}
+function plStop(msg) {
+  Player.on = false;
+  if (Player.audio) { Player.audio.pause(); try { Player.audio.currentTime = 0; } catch (e) {} }
+  plSalva(); plStato(); plUi();
+  if (msg) toast(msg);
+}
+function plSalta(d) {          /* ±1 āya, dentro il range */
+  plRipristina();
+  Player.id = Math.max(Player.da, Math.min(Player.a, (Player.id || Player.da) + d));
+  Player.riserva = false;
+  Player.on ? plCarica() : plUi();
+}
+function plSaltaSura(d) {      /* come i brani: ⏮ torna all'inizio della sura, ⏭ va alla prossima */
+  plRipristina();
+  const p = store._ayaDaIndice(Player.id || Player.da);
+  let s = p.sura;
+  if (d > 0) s = Math.min(114, s + 1);
+  else if (p.aya <= 1) s = Math.max(1, s - 1);
+  Player.id = Math.max(Player.da, Math.min(Player.a, store.idxDi(s, 1)));
+  Player.riserva = false;
+  Player.on ? plCarica() : plUi();
+}
+function plVai(idx) { plGioca(idx); }
+function plSetVel(v) {
+  Player.vel = +v;
+  if (Player.audio) Player.audio.playbackRate = Player.vel;
+  plSalva(); plUi();
+}
+function plSetLoop() { plRipristina(); Player.loop = !Player.loop; plSalva(); plUi(); }
+
+/* una sura intera come un brano: la tocchi e parte */
+function plSura(n) {
+  n = +n;
+  plRipristina();
+  Player.da = store.idxDi(n, 1);
+  Player.a = store.idxDi(n, store.vvSura(n));
+  plGioca(Player.da);
+}
+function plRangeDalForm() {
+  plRipristina();
+  const sd = +$('#pl-da-s').value, sa = +$('#pl-a-s').value;
+  const ad = Math.max(1, Math.min(store.vvSura(sd), +$('#pl-da-a').value || 1));
+  const aa = Math.max(1, Math.min(store.vvSura(sa), +$('#pl-a-a').value || store.vvSura(sa)));
+  let i1 = store.idxDi(sd, ad), i2 = store.idxDi(sa, aa);
+  if (i2 < i1) { const t = i1; i1 = i2; i2 = t; }
+  Player.da = i1; Player.a = i2;
+  plGioca(Player.da);
+}
+/* cambiata la sura "Da": l'āya riparte da 1 e la fine si allinea alla stessa sura */
+function plFormDa() {
+  const s = +$('#pl-da-s').value, vv = store.vvSura(s);
+  $('#pl-da-a').max = vv; $('#pl-da-a').value = 1;
+  $('#pl-a-s').value = s;
+  $('#pl-a-a').max = vv; $('#pl-a-a').value = vv;
+}
+function plFormA() {
+  const s = +$('#pl-a-s').value, vv = store.vvSura(s);
+  $('#pl-a-a').max = vv; $('#pl-a-a').value = vv;
+}
+
+/* ---- i testi sotto il player: finestra propria, a blocchi di 20 ---- */
+let plTestiRichiesta = 0;
+function plTesti() {
+  const id = Player.id;
+  if (Player.testi[id] && Player.testi[Math.min(id + 8, Player.a)]) return;
+  const mia = ++plTestiRichiesta;
+  store.testiAyat(id, Math.min(Player.a, id + 20)).then(righe => {
+    if (mia !== plTestiRichiesta) return;
+    righe.forEach(r => { Player.testi[r.id] = r; });
+    plUi();
+  }).catch(() => {});
+}
+
+/* ---- Media Session: titolo e tasti sulla schermata di blocco ---- */
+function plMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    const p = store._ayaDaIndice(Player.id || Player.da);
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: `${store.nomeSura(p.sura)} · ${p.sura}:${p.aya}`,
+      artist: 'Maḥmūd Khalīl al-Ḥuṣarī',
+      album: 'Addukira · Ascolto',
+      artwork: [{ src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }],
+    });
+    navigator.mediaSession.setActionHandler('play', () => { if (!Player.on) plToggle(); });
+    navigator.mediaSession.setActionHandler('pause', () => plPausa());
+    navigator.mediaSession.setActionHandler('previoustrack', () => plSalta(-1));
+    navigator.mediaSession.setActionHandler('nexttrack', () => plSalta(1));
+    plStato();
+  } catch (e) { /* browser senza Media Session: pazienza */ }
+}
+function plStato() {
+  if ('mediaSession' in navigator) {
+    try { navigator.mediaSession.playbackState = Player.on ? 'playing' : 'paused'; } catch (e) {}
+  }
+}
+
+/* ---- la pagina ---- */
+function renderAscolto() {
+  plRipristina();
+  let html = dayHeader('Ascolto');
+  html += `<p class="sub">La voce di Ḥuṣarī come in un lettore musicale: tocca una sura per farla partire,
+    o scegli un intervallo. L'ascolto continua anche nelle altre pagine e a schermo spento.</p>`;
+  html += plCardHtml();
+
+  const pDa = store._ayaDaIndice(Player.da), pA = store._ayaDaIndice(Player.a);
+  const opzioni = sel => store.sureTutte().map(s =>
+    `<option value="${s.numero}" ${s.numero === sel ? 'selected' : ''}>${s.numero} · ${esc(s.nome)}</option>`).join('');
+  html += `<div class="pl-form">
+    <div class="pl-f"><label>Da</label>
+      <select id="pl-da-s" onchange="plFormDa()">${opzioni(pDa.sura)}</select>
+      <input id="pl-da-a" type="number" min="1" max="${store.vvSura(pDa.sura)}" value="${pDa.aya}" title="Āya di partenza"></div>
+    <div class="pl-f"><label>a</label>
+      <select id="pl-a-s" onchange="plFormA()">${opzioni(pA.sura)}</select>
+      <input id="pl-a-a" type="number" min="1" max="${store.vvSura(pA.sura)}" value="${pA.aya}" title="Āya finale"></div>
+    <button class="add" onclick="plRangeDalForm()">▶ Ascolta l'intervallo</button>
+  </div>`;
+
+  const cur = store._ayaDaIndice(Player.id || Player.da).sura;
+  html += `<div class="pl-list">` + store.sureTutte().map(s => `
+    <div class="pl-row ${s.numero === cur ? 'playing' : ''}" data-sura="${s.numero}" onclick="plSura(${s.numero})">
+      <span class="pl-n">${s.numero}</span>
+      <span class="pl-nome">${esc(s.nome)}</span>
+      <span class="pl-vv">${s.vv} āyāt</span>
+      <span class="pl-go">${s.numero === cur && Player.on ? '♪' : '▶'}</span>
+    </div>`).join('') + `</div>`;
+
+  $('#p-ascolto').innerHTML = html;
+}
+
+function plCardHtml() {
+  plRipristina();
+  const p = store._ayaDaIndice(Player.id || Player.da);
+  const pDa = store._ayaDaIndice(Player.da), pA = store._ayaDaIndice(Player.a);
+  const r = Player.testi[Player.id];
+  return `<div class="pl-card" id="pl-card">
+    <div class="pl-sura">${esc(store.nomeSura(p.sura))} <span class="pl-pos">${p.sura}:${p.aya}</span></div>
+    <div class="pl-range-lbl" id="pl-range-lbl">${esc(store.fmtPos(pDa))} → ${esc(store.fmtPos(pA))}
+      · āya ${Player.id - Player.da + 1} di ${Player.a - Player.da + 1}</div>
+    <input class="pl-seek" type="range" min="${Player.da}" max="${Player.a}" value="${Player.id || Player.da}"
+      oninput="plSeekLbl(this.value)" onchange="plVai(+this.value)" aria-label="Posizione nell'intervallo">
+    <div class="pl-ctrl">
+      <button class="rb-b" title="Inizio sura / sura precedente" onclick="plSaltaSura(-1)">⏮</button>
+      <button class="rb-b" title="Āya precedente" onclick="plSalta(-1)">⏪</button>
+      <button class="rb-b play ${Player.on ? 'on' : ''}" title="${Player.on ? 'Pausa' : 'Ascolta'}" onclick="plToggle()">${Player.on ? '⏸' : '▶'}</button>
+      <button class="rb-b" title="Āya successiva" onclick="plSalta(1)">⏩</button>
+      <button class="rb-b" title="Sura successiva" onclick="plSaltaSura(1)">⏭</button>
+    </div>
+    <div class="pl-opts">
+      ${[0.8, 1, 1.25, 1.5, 2].map(v =>
+        `<span class="chip ${Player.vel === v ? 'sel' : ''}" onclick="plSetVel(${v})">×${v}</span>`).join('')}
+      <button class="rb-b loop ${Player.loop ? 'on' : ''}" title="Finito l'intervallo, ricomincia" onclick="plSetLoop()">🔁</button>
+    </div>
+    ${r ? `<div class="pl-testo"><div class="pl-ar" dir="rtl">${esc(r.arabo)}</div>
+      ${r.it ? `<div class="pl-it">${esc(r.it)}</div>` : ''}</div>` : ''}
+  </div>`;
+}
+/* mentre trascini il cursore: solo l'etichetta, il play parte al rilascio */
+function plSeekLbl(v) {
+  const el = document.getElementById('pl-range-lbl'); if (!el) return;
+  const pDa = store._ayaDaIndice(Player.da), pA = store._ayaDaIndice(Player.a);
+  el.textContent = `${store.fmtPos(pDa)} → ${store.fmtPos(pA)} · āya ${+v - Player.da + 1} di ${Player.a - Player.da + 1}`;
+}
+
+function plUi() {
+  const card = document.getElementById('pl-card');
+  if (card) card.outerHTML = plCardHtml();
+  const lista = document.querySelector('#p-ascolto .pl-list');
+  if (lista) {
+    const cur = store._ayaDaIndice(Player.id || Player.da).sura;
+    lista.querySelectorAll('.pl-row').forEach(riga => {
+      const mia = +riga.dataset.sura === cur;
+      riga.classList.toggle('playing', mia);
+      riga.querySelector('.pl-go').textContent = mia && Player.on ? '♪' : '▶';
+    });
+  }
+  plMini();
+}
+
+/* la mini-barra: vive su body e compare fuori dalla pagina Ascolto */
+function plMini() {
+  let host = document.getElementById('player-mini-host');
+  if (!host) { host = document.createElement('div'); host.id = 'player-mini-host'; document.body.appendChild(host); }
+  if (!Player.on || paginaAttiva === 'ascolto') { host.innerHTML = ''; return; }
+  const p = store._ayaDaIndice(Player.id || Player.da);
+  host.innerHTML = `<div class="pl-mini" onclick="nav('ascolto')" title="Apri l'Ascolto">
+    <span class="pm-e">🎧</span><span class="pm-pos">${esc(store.fmtPos(p))}</span>
+    <button class="pm-b" title="Pausa" onclick="event.stopPropagation();plPausa()">⏸</button>
+  </div>`;
+}
 
 /* la data del pensiero: in tabella è `giorno` (YYYY-MM-DD) */
 function dataPensiero(p) {
@@ -2826,7 +3112,7 @@ const tzLabel = tz => tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' 
 /* sezioni della sidebar che si possono nascondere (tutte tranne Oggi e Impostazioni) */
 /* stesso ordine della sidebar: Azioni sta nella mia vita, non nello studio */
 const TOGGLE_SEZIONI = [
-  ['lettura', 'Lettura'], ['memorizzazione', 'Memorizzazione'], ['pensieri', 'Pensieri'],
+  ['lettura', 'Lettura'], ['memorizzazione', 'Memorizzazione'], ['ascolto', 'Ascolto'], ['pensieri', 'Pensieri'],
   ['azioni', 'Azioni'],
   ['allah', 'Allah'], ['quran', 'Corano'], ['hadith', 'Hadith'], ['people', 'Personaggi'],
   ['stories', 'Storie'], ['themes', 'Temi'], ['fiqh', 'Fiqh'],
@@ -3042,6 +3328,7 @@ function renderPage(p) {
   if (p === 'oggi') renderOggi();
   if (p === 'lettura') renderLettura();
   if (p === 'memorizzazione') renderMemorizzazione();
+  if (p === 'ascolto') renderAscolto();
   if (p === 'pensieri') renderPensieri();
   if (p === 'quran') renderQuran();
   if (p === 'hadith') renderHadith();

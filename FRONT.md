@@ -235,6 +235,34 @@ ora). I browser mantengono le legature arabe attraverso gli span. Colori
 in style.css (`.tj.*`), convenzione Dar al-Maʿrifah scurita per lo sfondo
 crema.
 
+## Ascolto: il lettore musicale del Corano (20 ago 2026)
+
+Pagina propria (`#p-ascolto`, voce «🎧 Ascolto» nel rail sotto
+Memorizzazione): Adil riusciva ad ascoltare le singole āyāt ma non il
+Corano di seguito — questa pagina è per l'ascolto continuo, come un
+lettore musicale. Motore `Player` (app.js), SEPARATO da `Rec`
+(che serve la ḥifẓ con le ripetizioni); stessi file audio di Ḥuṣarī,
+id globale 1–6236 = nome del file, con riserva everyayah.
+
+- **Playlist delle 114 sure**: tocchi una sura e parte (range = quella
+  sura). Oppure form «Da sura:āya a sura:āya» per un intervallo
+  qualsiasi, anche attraverso più sure.
+- **Scheda player**: nome sura + posizione, cursore di avanzamento per
+  āya sul range, ⏮ inizio/sura precedente · ⏪ āya · ▶/⏸ · āya ⏩ ·
+  sura ⏭, velocità ×0.8–×2 (`playbackRate`), 🔁 loop sul range. Sotto,
+  il testo dell'āya in ascolto (arabo + traduzione) via
+  `store.testiAyat(da,a)` — finestra PROPRIA a blocchi di 20, non tocca
+  `DB.ayat` né la finestra della Lettura.
+- **Non si ferma cambiando pagina** (a differenza di Rec): fuori dalla
+  pagina resta la mini-barra flottante in basso (`#player-mini-host` su
+  body) con posizione e pausa; tocco → torna all'Ascolto. Media Session
+  per la schermata di blocco (titolo = sura · s:a, ⏯ e salto āya);
+  l'audio prosegue a schermo spento. Esclusione reciproca con Rec:
+  parte uno, l'altro si mette in pausa.
+- **Riprende da dov'era**: stato in `impostazioni.audio.ascolto`
+  ({da, a, id, vel, loop}), salvato a ogni pausa e ogni 10 āyāt durante
+  il play. La prossima āya viene pre-scaldata in cache (`Player.pre`).
+
 **Recitazione (Ḥuṣarī):** barra audio (`recUiHtml`) sopra il testo di
 studio — ▶/⏸, ⏮ ⏭, ripetizioni ×1/×3/×5/×10 per āya, 🔁 loop sul passo.
 L'āya in ascolto si illumina (`.leggendo`, `data-idx` scopato per pagina:
