@@ -260,6 +260,7 @@ function setOra(id, ora) {
 /* ============================================================
    LETTURA
    ============================================================ */
+let ltCarico = 0;   /* ultimo centro richiesto: evita caricamenti doppi */
 function renderLettura() {
   const L = store.lettura();
   const active = store.activeKhatam();
@@ -374,6 +375,21 @@ function renderLettura() {
     $('#p-lettura').innerHTML = html;
     return;
   }
+
+  /* --- la finestra dei versetti è UNA e condivisa: la Memorizzazione la
+         sposta sulla sua sura di studio, quindi prima di disegnare
+         controllo che contenga il segnalibro, e se no torno da lui.
+         Stesso idioma (e stessa guardia) di renderMemorizzazione. --- */
+  const centro = Math.max(1, bmIdx);
+  if (!store.list('ayat_demo').some(v => v.id === centro)) {
+    $('#p-lettura').innerHTML = html + `<div class="empty">Torno al segnalibro…</div>`;
+    if (ltCarico !== centro) {               /* guardia: mai due caricamenti uguali di fila */
+      ltCarico = centro;
+      store.caricaAyat({ da: Math.max(1, centro - 3) }).then(() => renderLettura());
+    }
+    return;
+  }
+  ltCarico = 0;   /* caricata: la prossima deriva della finestra può ripartire */
 
   /* --- due modi di leggere lo stesso testo --- */
   const modo = (store.getSettings().vista.lettore) || 'flusso';
