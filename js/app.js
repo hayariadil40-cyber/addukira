@@ -188,7 +188,8 @@ function bloccoMomento(m) {
     const st = stati[i];
     const ev = a.verso === 'evitare';
     const cls = st === 'fatto' ? 'done' : (st ? 'skip' : '');
-    const dh = a.adhkar_id ? store.get('adhkar', a.adhkar_id) : null;   /* testo canonico */
+    /* il testo canonico: dall'attività se ce l'ha, altrimenti dai dhikr dell'azione */
+    const dhs = a.adhkar_id ? [store.get('adhkar', a.adhkar_id)].filter(Boolean) : dhikrDiAzione(a.azione_id);
     const az = a.azione_id ? store.get('azioni', a.azione_id) : null;   /* da dove nasce */
     const oraL = store.oraLabel(a);
     h += `<div class="task ${cls} ${ev ? 'ev' : ''}">
@@ -198,9 +199,9 @@ function bloccoMomento(m) {
         ${oraL ? `<span class="oral">${esc(oraL)}</span>` : ''}
         ${st === 'auto' ? `<span class="skipped">${m.sempre ? 'persa — è passato il Maghrib' : 'persa — la fascia è passata'}</span>` : ''}
         ${st === 'saltato' ? `<span class="skipped">${ev ? 'ci sono cascato' : 'saltata'}</span>` : ''}</div>
-      ${dh && dh.arabo ? `<div class="arx">${esc(dh.arabo)}</div>` : ''}
-      ${dh && dh.traduzione ? `<div class="tr">${esc(dh.traduzione)}</div>` : ''}
-      ${dh ? pillLinks(dh) : ''}
+      ${dhs.map(dh => `${dh.arabo ? `<div class="arx">${esc(dh.arabo)}</div>` : ''}
+      ${dh.traduzione ? `<div class="tr">${esc(dh.traduzione)}</div>` : ''}
+      ${pillLinks(dh)}`).join('')}
       ${az ? `<div class="why"><span class="pill az" onclick="openStudioDetail('azioni','${az.id}')">⚖️ ${esc(az.titolo)}</span></div>` : ''}</div>
       <div class="acts">
         <button class="tb ok ${st === 'fatto' ? 'on' : ''}" title="${ev ? 'Non ci sono cascato' : 'Fatto'}" onclick="setAtt('${a.id}','fatto')">✓</button>
@@ -2697,10 +2698,29 @@ function openStudioDetail(key, id) {
    ============================================================ */
 const evitare = x => x.categoria === 'peccato';
 
+/* i dhikr agganciati a un'azione (legame adhkar —parte_di→ azione) */
+const dhikrDiAzione = azId => azId
+  ? store.collegatiA('azione', azId, 'adhkar').map(l => store.get('adhkar', l.id)).filter(Boolean)
+  : [];
+
+/* il testo di un dhikr scritto per esteso: si legge da qui, al volo */
+const dhikrCard = d => `<div class="note-b dk-full">
+  <div class="l">${esc(d.nome || 'Dhikr')}${d.ripetizioni_std ? ` · ${esc(d.ripetizioni_std)}` : ''}</div>
+  ${d.arabo ? `<div class="dk-ar">${esc(d.arabo)}</div>` : ''}
+  ${d.translit ? `<div class="dk-tl">${esc(d.translit)}</div>` : ''}
+  ${d.traduzione ? `<div class="dk-tr">«${esc(d.traduzione)}»</div>` : ''}
+</div>`;
+
 function bloccoAzione(x) {
+  /* --- prima di tutto il testo da recitare: è quello che serve al volo --- */
+  const dhs = dhikrDiAzione(x.id);
+  let h = dhs.length
+    ? `<h2>${dhs.length > 1 ? 'Da recitare' : 'Il duʿāʾ da recitare'}</h2>` + dhs.map(dhikrCard).join('')
+    : '';
+
   /* --- hadith che fondano questa azione --- */
   const link = store.collegatiA('azione', x.id, 'hadith');
-  let h = `<h2>Hadith che la fondano</h2>`;
+  h += `<h2>Hadith che la fondano</h2>`;
   h += link.map(l => {
     const hd = store.get('hadith', l.id);
     if (!hd) return '';
