@@ -52,6 +52,8 @@
   <div class="lnk" data-p="segni_ora"><span class="e">⏳</span><span data-i18n="nav.segni_ora">Segni dell'Ora</span> <span class="c" id="c-segni_ora"></span></div>
   <div class="lnk" data-p="creazione"><span class="e">🌌</span><span data-i18n="nav.creazione">La creazione</span> <span class="c" id="c-creazione"></span></div>
   <div class="lnk" data-p="luoghi"><span class="e">🕌</span><span data-i18n="nav.luoghi">Luoghi</span> <span class="c" id="c-luoghi"></span></div>
+  <div class="grp" data-i18n="nav.group.family">Famiglia</div>
+  <div class="lnk" data-p="cassa"><span class="e">🧾</span><span data-i18n="nav.cassa">Cassa zio</span></div>
   <div class="lnk lnk-set" data-p="impostazioni"><span class="e">⚙️</span><span data-i18n="nav.impostazioni">Impostazioni</span></div>
   <div class="langbar">
     <button class="langb" data-lang-btn="it">IT</button>
@@ -85,6 +87,7 @@
     <section class="page" id="p-segni_ora"></section>
     <section class="page" id="p-creazione"></section>
     <section class="page" id="p-luoghi"></section>
+    <section class="page" id="p-cassa"></section>
     <section class="page" id="p-impostazioni"></section>
     <section class="page" id="p-search"></section>
     <section class="page" id="p-detail"></section>
@@ -153,6 +156,29 @@
     </div>
     <div class="f"><label>Un pensiero su questo khatam</label><textarea id="kh-thought" placeholder="Cosa ti lascia questa lettura…"></textarea></div>
     <div class="m-act"><button class="btn2" id="kh-close">Chiudi</button><button class="add" id="kh-save">Salva pensiero</button></div>
+  </div>
+</div>
+<div class="veil" id="veil-cassa">
+  <div class="modal">
+    <h2 id="cs-h2" data-i18n="cassa.m_new">Nuovo movimento</h2>
+    <div class="s" data-i18n="cassa.m_s">Importo sempre positivo: il tipo dice se entra o esce.</div>
+    <div class="row2">
+      <div class="f"><label data-i18n="cassa.l_tipo">Tipo</label>
+        <select id="cs-tipo" onchange="cassaCampi()">
+          <option value="spesa" data-i18n="cassa.spesa">Spesa</option>
+          <option value="donazione" data-i18n="cassa.donazione">Donazione</option>
+        </select></div>
+      <div class="f"><label data-i18n="cassa.l_data">Data</label><input type="date" id="cs-data"></div>
+    </div>
+    <div class="row2">
+      <div class="f"><label data-i18n="cassa.l_importo">Importo (DH)</label><input type="number" id="cs-importo" min="0" step="0.01" inputmode="decimal"></div>
+      <div class="f" id="cs-f-don"><label data-i18n="cassa.l_don">N. donatore</label><input type="number" id="cs-don" min="1" step="1" inputmode="numeric"></div>
+      <div class="f" id="cs-f-cat"><label data-i18n="cassa.l_cat">Categoria</label><select id="cs-cat"></select></div>
+    </div>
+    <div class="f"><label data-i18n="cassa.l_desc">Descrizione</label><input id="cs-desc" autocomplete="off"></div>
+    <div class="f"><label data-i18n="cassa.l_desc_dr">Descrizione in darija <span class="lbl-hint" data-i18n="cassa.facolt">facoltativa</span></label><input id="cs-desc-dr" class="ar-in" autocomplete="off"></div>
+    <div class="f"><label data-i18n="cassa.l_desc_ar">Descrizione in arabo <span class="lbl-hint" data-i18n="cassa.facolt">facoltativa</span></label><input id="cs-desc-ar" class="ar-in" autocomplete="off"></div>
+    <div class="m-act"><button class="btn2" onclick="cassaChiudi()" data-i18n="cassa.annulla">Annulla</button><button class="add" onclick="cassaSalva()" data-i18n="cassa.salva">Salva</button></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>

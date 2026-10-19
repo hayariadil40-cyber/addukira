@@ -32,7 +32,7 @@ const suraOf = id => store.get('sure', id);
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2100); }
 
 /* ---- navigazione ---- */
-const PAGES = ['oggi', 'lettura', 'memorizzazione', 'ascolto', 'pensieri', 'allah', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'azioni', 'segni_ora', 'creazione', 'luoghi', 'impostazioni', 'search', 'detail'];
+const PAGES = ['oggi', 'lettura', 'memorizzazione', 'ascolto', 'pensieri', 'allah', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'azioni', 'segni_ora', 'creazione', 'luoghi', 'cassa', 'impostazioni', 'search', 'detail'];
 let paginaAttiva = 'oggi';
 function show(p) {
   PAGES.forEach(x => $('#p-' + x).classList.remove('on')); $('#p-' + p).classList.add('on'); window.scrollTo(0, 0);
@@ -3375,6 +3375,7 @@ function renderPage(p) {
   if (p === 'creazione') renderRaccolta('creazione');
   if (p === 'luoghi') renderRaccolta('luogo');
   if (p === 'fiqh') renderRaccolta('fiqh');
+  if (p === 'cassa') renderCassa();
 }
 
 /* ============================================================
@@ -3868,4 +3869,175 @@ window.avviaApp = avviaApp;
 /* PWA: registra il service worker se servita via http(s) */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+/* ============================================================
+   CASSA DI FAMIGLIA — conto spese zio 3rbi
+   Tabelle cassa_movimenti / cassa_donatori (Layer B, RLS).
+   Fuori dalla cache dello store: si legge da Supabase a ogni apertura
+   della pagina, le scritture aspettano la risposta (sono poche e rare).
+   ============================================================ */
+const CASSA_CAT = ['Affitto', 'Bollette', 'Spesa alimentare', 'Farmaci e salute', 'Condominio', 'Trasporti', 'Arredamento', 'Agente immobiliare', 'Altro'];
+const CASSA_CAT_AR = {
+  'Affitto': 'الإيجار', 'Bollette': 'الفواتير', 'Spesa alimentare': 'المواد الغذائية', 'Farmaci e salute': 'الأدوية والصحة',
+  'Condominio': 'رسوم العمارة', 'Trasporti': 'النقل', 'Arredamento': 'الأثاث', 'Agente immobiliare': 'الوسيط العقاري', 'Altro': 'أخرى',
+};
+let cassaMov = [], cassaDon = [], cassaFiltro = 'all', cassaNomi = false, cassaEditId = null;
+
+const cassaLoc = () => store.getLang() === 'ar' ? 'ar-MA' : 'it-IT';
+const cassaCur = n => Number(n).toLocaleString('it-IT', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' ' + t('cassa.cur');
+const cassaCat = c => (store.getLang() === 'ar' ? CASSA_CAT_AR[c] : null) || c || 'Altro';
+const cassaData = s => new Date(s + 'T12:00:00');
+
+async function renderCassa() {
+  const box = $('#p-cassa');
+  box.innerHTML = head(t('cassa.eye'), t('cassa.title'), t('cassa.sub')) + `<div class="empty">${t('cassa.loading')}</div>`;
+  const [m, d] = await Promise.all([
+    sb.from('cassa_movimenti').select('*').order('data', { ascending: false }).order('creato_il', { ascending: false }),
+    sb.from('cassa_donatori').select('*').order('n'),
+  ]);
+  if (m.error) { box.innerHTML = head(t('cassa.eye'), t('cassa.title'), t('cassa.sub')) + `<div class="empty">${esc(m.error.message)}</div>`; return; }
+  cassaMov = m.data || [];
+  cassaDon = d.data || [];
+  drawCassa();
+}
+
+function drawCassa() {
+  const box = $('#p-cassa'); if (!box) return;
+  const inTot = cassaMov.filter(x => x.tipo === 'donazione').reduce((s, x) => s + +x.importo, 0);
+  const outTot = cassaMov.filter(x => x.tipo === 'spesa').reduce((s, x) => s + +x.importo, 0);
+  const nomeDon = n => { const d = cassaDon.find(x => x.n === n); return d ? d.nome : ''; };
+
+  let h = head(t('cassa.eye'), t('cassa.title'), t('cassa.sub'));
+  h += `<div class="stat-grid">
+    <div class="stat ok"><div class="s-n amt">${cassaCur(inTot)}</div><div class="s-l">${t('cassa.in')}</div></div>
+    <div class="stat late"><div class="s-n amt">${cassaCur(outTot)}</div><div class="s-l">${t('cassa.out')}</div></div>
+    <div class="stat"><div class="s-n amt">${cassaCur(inTot - outTot)}</div><div class="s-l">${t('cassa.saldo')}</div></div>
+  </div>`;
+  h += `<div class="add-pensiero" onclick="cassaApri()">＋ ${t('cassa.add')}</div>`;
+  h += `<div class="cassa-bar"><div class="chips">${['all', 'donazione', 'spesa'].map(f =>
+      `<span class="chip ${cassaFiltro === f ? 'sel' : ''}" onclick="cassaFiltra('${f}')">${t('cassa.f_' + f)}</span>`).join('')}</div>
+    <label class="cassa-tog"><input type="checkbox" ${cassaNomi ? 'checked' : ''} onchange="cassaNomi=this.checked;drawCassa()"> ${t('cassa.nomi')}</label></div>`;
+
+  /* movimenti, dal più recente, raggruppati per mese */
+  const lista = cassaMov.filter(x => cassaFiltro === 'all' || x.tipo === cassaFiltro);
+  let mese = '';
+  h += '<div class="cassa-list">';
+  lista.forEach(x => {
+    const d = cassaData(x.data);
+    const mk = d.toLocaleDateString(cassaLoc(), { month: 'long', year: 'numeric' });
+    if (mk !== mese) { mese = mk; h += `<div class="cassa-month">${esc(mk)}</div>`; }
+    const ar = store.getLang() === 'ar';
+    const desc = ar ? (x.descrizione_ar || x.descrizione_dr || x.descrizione) : x.descrizione;
+    const titolo = desc || (x.tipo === 'donazione' ? t('cassa.donazione') : cassaCat(x.categoria));
+    let chi;
+    if (x.tipo === 'donazione') {
+      const nome = cassaNomi && x.donatore_n ? nomeDon(x.donatore_n) : '';
+      chi = nome || (x.donatore_n ? t('cassa.donatore') + ' ' + x.donatore_n : t('cassa.donazione'));
+    } else chi = cassaCat(x.categoria);
+    h += `<div class="cassa-row">
+      <div><div class="cassa-desc">${esc(titolo)}</div><div class="cassa-meta">${esc(d.toLocaleDateString(cassaLoc(), { day: 'numeric', month: 'short' }))} · ${esc(chi)}</div></div>
+      <div class="cassa-amt ${x.tipo === 'donazione' ? 'in' : 'out'}"><span class="amt">${x.tipo === 'donazione' ? '+' : '−'} ${cassaCur(+x.importo)}</span></div>
+      <div class="cassa-acts"><button class="tb" onclick="cassaApri('${x.id}')">✎</button><button class="tb no" onclick="cassaElimina('${x.id}')">🗑</button></div>
+    </div>`;
+  });
+  if (!lista.length) h += `<div class="empty">${t('cassa.vuoto')}</div>`;
+  h += '</div>';
+
+  /* dove vanno i soldi: totale spese per voce */
+  const perCat = {};
+  cassaMov.filter(x => x.tipo === 'spesa').forEach(x => { const c = x.categoria || 'Altro'; perCat[c] = (perCat[c] || 0) + +x.importo; });
+  const cats = Object.entries(perCat).sort((a, b) => b[1] - a[1]);
+  const max = cats.length ? cats[0][1] : 1;
+  h += `<div class="hd">${t('cassa.dove')}<span class="hd-c amt">${cassaCur(outTot)}</span></div>`;
+  h += cats.map(([c, tot]) => `<div class="cassa-cat">
+      <div class="cassa-cat-row"><b>${esc(cassaCat(c))}</b><span class="amt">${cassaCur(tot)} · ${Math.round(tot / outTot * 100)}%</span></div>
+      <div class="prog"><i style="width:${(tot / max * 100).toFixed(1)}%"></i></div></div>`).join('')
+    || `<div class="empty">${t('cassa.nospese')}</div>`;
+
+  /* donatori: solo quando si chiede di vedere i nomi */
+  if (cassaNomi) {
+    const totDon = {};
+    cassaMov.filter(x => x.tipo === 'donazione' && x.donatore_n).forEach(x => totDon[x.donatore_n] = (totDon[x.donatore_n] || 0) + +x.importo);
+    const nums = [...new Set([...cassaDon.map(d => d.n), ...Object.keys(totDon).map(Number)])].sort((a, b) => a - b);
+    h += `<div class="hd">${t('cassa.donatori')}</div>`;
+    h += nums.map(n => `<div class="cassa-don"><span class="n">${n}</span><span>${esc(nomeDon(n) || '—')}</span><span class="tot amt">${cassaCur(totDon[n] || 0)}</span></div>`).join('');
+    h += `<div class="cassa-don-form">
+      <input type="number" id="cd-n" min="1" step="1" placeholder="${t('cassa.don_n')}" inputmode="numeric">
+      <input id="cd-nome" placeholder="${t('cassa.don_nome')}" autocomplete="off">
+      <button class="add" onclick="cassaDonSalva()">${t('cassa.don_add')}</button></div>`;
+  }
+  box.innerHTML = h;
+}
+
+function cassaFiltra(f) { cassaFiltro = f; drawCassa(); }
+
+/* ---- modale movimento ---- */
+function cassaCampi() {
+  const don = $('#cs-tipo').value === 'donazione';
+  $('#cs-f-don').style.display = don ? '' : 'none';
+  $('#cs-f-cat').style.display = don ? 'none' : '';
+}
+function cassaApri(id) {
+  cassaEditId = id || null;
+  const x = id ? cassaMov.find(m => m.id === id) : null;
+  $('#cs-h2').textContent = t(id ? 'cassa.m_edit' : 'cassa.m_new');
+  const sel = $('#cs-cat');
+  sel.innerHTML = CASSA_CAT.map(c => `<option value="${esc(c)}">${esc(cassaCat(c))}</option>`).join('');
+  $('#cs-tipo').value = x ? x.tipo : 'spesa';
+  $('#cs-data').value = x ? x.data : store.today();
+  $('#cs-importo').value = x ? x.importo : '';
+  $('#cs-don').value = x && x.donatore_n ? x.donatore_n : '';
+  sel.value = x && x.categoria && CASSA_CAT.includes(x.categoria) ? x.categoria : 'Altro';
+  $('#cs-desc').value = x ? x.descrizione || '' : '';
+  $('#cs-desc-dr').value = x ? x.descrizione_dr || '' : '';
+  $('#cs-desc-ar').value = x ? x.descrizione_ar || '' : '';
+  cassaCampi();
+  $('#veil-cassa').classList.add('on');
+  setTimeout(() => $('#cs-importo').focus(), 50);
+}
+function cassaChiudi() { $('#veil-cassa').classList.remove('on'); cassaEditId = null; }
+
+async function cassaSalva() {
+  const tipo = $('#cs-tipo').value;
+  const importo = parseFloat($('#cs-importo').value);
+  const data = $('#cs-data').value;
+  if (!(importo > 0)) { toast(t('cassa.err_importo')); return; }
+  if (!data) { toast(t('cassa.err_data')); return; }
+  const row = {
+    tipo, data, importo: Math.round(importo * 100) / 100,
+    donatore_n: tipo === 'donazione' ? (parseInt($('#cs-don').value, 10) || null) : null,
+    categoria: tipo === 'spesa' ? $('#cs-cat').value : null,
+    descrizione: $('#cs-desc').value.trim(),
+    descrizione_dr: $('#cs-desc-dr').value.trim() || null,
+    descrizione_ar: $('#cs-desc-ar').value.trim() || null,
+  };
+  const q = cassaEditId
+    ? sb.from('cassa_movimenti').update(row).eq('id', cassaEditId)
+    : sb.from('cassa_movimenti').insert(row);
+  const { error } = await q;
+  if (error) { toast(t('cassa.errore') + error.message); return; }
+  cassaChiudi();
+  toast(t('cassa.salvato'));
+  renderCassa();
+}
+
+async function cassaElimina(id) {
+  if (!confirm(t('cassa.conferma_del'))) return;
+  const { error } = await sb.from('cassa_movimenti').delete().eq('id', id);
+  if (error) { toast(t('cassa.errore') + error.message); return; }
+  toast(t('cassa.eliminato'));
+  renderCassa();
+}
+
+async function cassaDonSalva() {
+  const n = parseInt($('#cd-n').value, 10), nome = $('#cd-nome').value.trim();
+  if (!(n > 0) || !nome) return;
+  const esiste = cassaDon.find(d => d.n === n);
+  const { error } = esiste
+    ? await sb.from('cassa_donatori').update({ nome }).eq('n', n)
+    : await sb.from('cassa_donatori').insert({ n, nome });
+  if (error) { toast(t('cassa.errore') + error.message); return; }
+  toast(t('cassa.salvato'));
+  renderCassa();
 }
