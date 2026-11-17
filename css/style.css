@@ -802,3 +802,37 @@ body.con-lettore #lettore-ui-host{display:block}
 .cassa-don-form{display:grid;grid-template-columns:74px 1fr auto;gap:8px;margin-top:12px}
 .cassa-don-form input{border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:8px 10px;font-family:inherit;font-size:13.5px;color:var(--ink);outline:none;min-width:0}
 .cassa-don-form input:focus{border-color:var(--brass-lite)}
+/* ---------- diario personale: una pagina alla volta ---------- */
+.modal-wide{max-width:720px}
+.dia-ta{min-height:46vh!important;font-family:'Spectral',serif!important;font-size:15.5px!important;line-height:1.65}
+.dia-bar{display:flex;gap:10px;align-items:stretch;margin-bottom:18px}
+.dia-bar .add-pensiero{flex:1;margin:0}
+.dia-bar .btn2{white-space:nowrap}
+.dia-indice{border:1px solid var(--line);border-radius:13px;margin-bottom:18px;max-height:46vh;overflow-y:auto;background:var(--panel-2)}
+.dia-voce{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:baseline;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px}
+.dia-voce:last-child{border-bottom:0}
+.dia-voce:hover,.dia-voce.sel{background:rgba(176,141,70,.1)}
+.dia-voce-n{color:var(--brass);font-weight:600;font-size:12px}
+.dia-voce-t{font-weight:500}
+.dia-voce-d{color:var(--ink-soft);font-size:12px;white-space:nowrap}
+.dia-page{max-width:740px;margin:0 auto;background:#fbf8ef;border:1px solid var(--line);border-radius:6px 14px 14px 6px;border-inline-start:5px solid var(--brass-lite);box-shadow:0 1px 0 rgba(22,40,31,.05),0 14px 34px -22px rgba(22,40,31,.5);padding:30px 40px 20px;min-height:62vh;display:flex;flex-direction:column}
+.dia-top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.dia-date{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);font-weight:600}
+.dia-acts{display:flex;gap:6px;opacity:0;transition:.15s}
+.dia-page:hover .dia-acts{opacity:1}
+@media(hover:none){.dia-acts{opacity:1}}
+.dia-title{font-family:'Spectral',serif;font-weight:600;font-size:25px;line-height:1.25;margin:20px 0 4px}
+.dia-body{font-family:'Spectral',serif;font-size:16.5px;line-height:1.75;color:var(--ink);padding:10px 0 26px;flex:1;overflow-wrap:anywhere}
+.dia-p{margin:0 0 4px}
+.dia-gap{height:13px}
+.dia-h{font-family:'Inter',sans-serif;font-size:11px;letter-spacing:.14em;font-weight:600;color:var(--brass);margin:12px 0 6px}
+.dia-h2{font-weight:600;font-size:17px;margin:6px 0 3px}
+.dia-li{display:grid;grid-template-columns:22px 1fr;margin:0 0 3px}
+.dia-b{color:var(--brass)}
+.dia-foot{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;padding-top:14px;border-top:1px solid var(--line)}
+.dia-foot .dia-nav:last-child{justify-self:end}
+.dia-nav{border:0;background:none;color:var(--ink-soft);font-family:inherit;font-size:13px;cursor:pointer;padding:6px 4px;justify-self:start}
+.dia-nav:hover:not(:disabled){color:var(--ink)}
+.dia-nav:disabled{opacity:.3;cursor:default}
+.dia-num{font-family:'Spectral',serif;font-size:13.5px;color:var(--ink-soft)}
+@media(max-width:640px){.dia-page{padding:22px 20px 14px;border-radius:4px 12px 12px 4px}.dia-title{font-size:21px}.dia-body{font-size:16px}.dia-bar{flex-direction:column}}

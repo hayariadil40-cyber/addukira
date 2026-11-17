@@ -40,6 +40,7 @@
   <div class="lnk" data-p="memorizzazione"><span class="e">🧠</span><span data-i18n="nav.memorizzazione">Memorizzazione</span></div>
   <div class="lnk lnk-sub" data-p="ascolto"><span class="e">🎧</span><span data-i18n="nav.ascolto">Ascolto</span></div>
   <div class="lnk" data-p="pensieri"><span class="e">💭</span><span data-i18n="nav.pensieri">Pensieri</span> <span class="c" id="c-pens"></span></div>
+  <div class="lnk" data-p="diario"><span class="e">📓</span><span data-i18n="nav.diario">Diario</span></div>
   <div class="lnk" data-p="azioni"><span class="e">🤲</span><span data-i18n="nav.azioni">Azioni</span> <span class="c" id="c-azioni"></span></div>
   <div class="grp" data-i18n="nav.group.study">Lo studio</div>
   <div class="lnk lnk-allah" data-p="allah"><span class="e">ﷲ</span><span data-i18n="nav.allah">Allah</span> <span class="c" id="c-allah"></span></div>
@@ -88,6 +89,7 @@
     <section class="page" id="p-creazione"></section>
     <section class="page" id="p-luoghi"></section>
     <section class="page" id="p-cassa"></section>
+    <section class="page" id="p-diario"></section>
     <section class="page" id="p-impostazioni"></section>
     <section class="page" id="p-search"></section>
     <section class="page" id="p-detail"></section>
@@ -179,6 +181,18 @@
     <div class="f"><label data-i18n="cassa.l_desc_dr">Descrizione in darija <span class="lbl-hint" data-i18n="cassa.facolt">facoltativa</span></label><input id="cs-desc-dr" class="ar-in" autocomplete="off"></div>
     <div class="f"><label data-i18n="cassa.l_desc_ar">Descrizione in arabo <span class="lbl-hint" data-i18n="cassa.facolt">facoltativa</span></label><input id="cs-desc-ar" class="ar-in" autocomplete="off"></div>
     <div class="m-act"><button class="btn2" onclick="cassaChiudi()" data-i18n="cassa.annulla">Annulla</button><button class="add" onclick="cassaSalva()" data-i18n="cassa.salva">Salva</button></div>
+  </div>
+</div>
+<div class="veil" id="veil-diario">
+  <div class="modal modal-wide">
+    <h2 id="di-h2" data-i18n="diario.m_new">Nuova pagina</h2>
+    <div class="s" data-i18n="diario.m_s">Una pagina per giorno, o per argomento. Scrivi come viene.</div>
+    <div class="row2">
+      <div class="f"><label data-i18n="diario.l_giorno">Giorno</label><input type="date" id="di-giorno"></div>
+      <div class="f"><label data-i18n="diario.l_titolo">Titolo</label><input id="di-titolo" autocomplete="off"></div>
+    </div>
+    <div class="f"><label data-i18n="diario.l_testo">Testo</label><textarea id="di-testo" class="dia-ta"></textarea></div>
+    <div class="m-act"><button class="btn2" onclick="diarioChiudi()" data-i18n="diario.annulla">Annulla</button><button class="add" onclick="diarioSalva()" data-i18n="diario.salva">Salva</button></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>

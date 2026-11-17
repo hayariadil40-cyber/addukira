@@ -419,6 +419,20 @@ volta», store.js:312).
 Con `iniziato_il` e `completato_il` diventa finalmente possibile la domanda
 naturale: quanto ci hai messo, e stai andando più veloce di prima.
 
+## `diario`
+
+Il diario personale: **una riga = una pagina**. `id` · `user_id` · `giorno` ·
+`titolo` · `testo` · `creato_il` · `modificato_il` (trigger). Nessun legame:
+è scrittura di vita (giornate, routine, salute, viaggi), non studio.
+
+Nato il 2026-11-17 (migration `0003_diario.sql`) come luogo dedicato alle note
+che prima stavano nei pensieri con il testo che iniziava per `PERSONAL — `:
+quelle 14 righe sono state traslocate qui e tolte da `pensieri`. Chi scrive
+note personali dall'esterno (assistente) le mette in `diario`, non più nei pensieri.
+
+La pagina **Diario** la legge direttamente da Supabase (fuori dalla cache dello
+store, come la Cassa) e la mostra una pagina alla volta, in ordine di giorno.
+
 ## `pensieri`
 
 `id` uuid PK · `user_id` · `testo` · `giorno` date · `creato_il` timestamptz ·

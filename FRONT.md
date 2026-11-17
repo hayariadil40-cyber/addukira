@@ -22,6 +22,7 @@ Ordine di lavoro concordato:
 | **Lettura** | `khatam`ᴮ `ayat`ᴬ `ayat_traduzioni`ᴬ `sure`ᴬ `evidenziazioni`ᴮ | `khatam` `evidenziazioni` `pensieri` |
 | **Memorizzazione** | `ayat`ᴬ `sure`ᴬ `memorizzazione`ᴮ `piano_studio`ᴮ | `memorizzazione` `piano_studio` |
 | **Pensieri** | `pensieri`ᴮ `legami`ᴮ | `pensieri` `legami` |
+| **Diario** | `diario`ᴮ | `diario` |
 | **Allah** | `asma`ᴬ `legami` | `pensieri` `legami` |
 | **Corano** | `sure`ᴬ `ayat`ᴬ `ayat_traduzioni`ᴬ | — |
 | **Hadith** | `hadith`ᴬ `fonti`ᴬ | — (redazione) |

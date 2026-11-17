@@ -32,7 +32,7 @@ const suraOf = id => store.get('sure', id);
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2100); }
 
 /* ---- navigazione ---- */
-const PAGES = ['oggi', 'lettura', 'memorizzazione', 'ascolto', 'pensieri', 'allah', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'azioni', 'segni_ora', 'creazione', 'luoghi', 'cassa', 'impostazioni', 'search', 'detail'];
+const PAGES = ['oggi', 'lettura', 'memorizzazione', 'ascolto', 'pensieri', 'allah', 'quran', 'hadith', 'people', 'stories', 'themes', 'fiqh', 'azioni', 'segni_ora', 'creazione', 'luoghi', 'cassa', 'diario', 'impostazioni', 'search', 'detail'];
 let paginaAttiva = 'oggi';
 function show(p) {
   PAGES.forEach(x => $('#p-' + x).classList.remove('on')); $('#p-' + p).classList.add('on'); window.scrollTo(0, 0);
@@ -3376,6 +3376,7 @@ function renderPage(p) {
   if (p === 'luoghi') renderRaccolta('luogo');
   if (p === 'fiqh') renderRaccolta('fiqh');
   if (p === 'cassa') renderCassa();
+  if (p === 'diario') renderDiario();
 }
 
 /* ============================================================
@@ -4040,4 +4041,157 @@ async function cassaDonSalva() {
   if (error) { toast(t('cassa.errore') + error.message); return; }
   toast(t('cassa.salvato'));
   renderCassa();
+}
+
+/* ============================================================
+   DIARIO PERSONALE — una pagina alla volta, come un quaderno
+   Tabella diario (Layer B, RLS). Come la Cassa sta fuori dalla cache
+   dello store: si legge da Supabase a ogni apertura della pagina.
+   Le pagine sono in ordine di giorno; si apre sull'ultima scritta.
+   ============================================================ */
+let diarioPag = [], diarioIdx = -1, diarioEditId = null, diarioIndice = false;
+
+const diarioLoc = () => store.getLang() === 'ar' ? 'ar-MA' : 'it-IT';
+const diarioData = (g, opt) => new Date(g + 'T12:00:00').toLocaleDateString(diarioLoc(), opt);
+
+async function renderDiario(tieniId) {
+  const box = $('#p-diario');
+  const testa = head(t('diario.eye'), t('diario.title'), t('diario.sub'));
+  if (!diarioPag.length) box.innerHTML = testa + `<div class="empty">${t('diario.loading')}</div>`;
+  const { data, error } = await sb.from('diario').select('*').order('giorno').order('creato_il');
+  if (error) { box.innerHTML = testa + `<div class="empty">${esc(error.message)}</div>`; return; }
+  diarioPag = data || [];
+  const i = tieniId ? diarioPag.findIndex(x => x.id === tieniId) : -1;
+  diarioIdx = i >= 0 ? i : diarioPag.length - 1;
+  drawDiario();
+}
+
+/* il testo resta com'è stato scritto: righe vuote = stacco, "- " o "1." = elenco,
+   riga tutta maiuscola = titoletto, riga breve senza punto prima di un elenco = sottotitolo */
+function diarioFmt(testo) {
+  const righe = (testo || '').replace(/\r/g, '').split('\n');
+  const elenco = s => /^\s*([-•–]|\d+[.)])\s+\S/.test(s);
+  let h = '';
+  righe.forEach((riga, n) => {
+    const s = riga.trim();
+    if (!s) { h += '<div class="dia-gap"></div>'; return; }
+    const m = riga.match(/^(\s*)([-•–]|\d+[.)])\s+(.*)$/);
+    if (m) {
+      const liv = Math.min(3, Math.floor(m[1].replace(/\t/g, '  ').length / 2));
+      const segno = /\d/.test(m[2]) ? m[2] : '–';
+      h += `<div class="dia-li" style="margin-inline-start:${liv * 22}px"><span class="dia-b">${esc(segno)}</span><span>${esc(m[3])}</span></div>`;
+      return;
+    }
+    const breve = s.length <= 64 && !/[.!?;,…]$/.test(s);
+    if (breve && s === s.toUpperCase() && /[A-ZÀ-Ý]/.test(s)) { h += `<div class="dia-h">${esc(s)}</div>`; return; }
+    /* sottotitolo: riga breve senza punto, che apre un blocco (dopo uno stacco) o precede un elenco */
+    const dopo = righe[n + 1] || '', apre = n === 0 || !righe[n - 1].trim();
+    if (breve && dopo.trim() && (elenco(dopo) || (apre && s.length <= 44))) { h += `<div class="dia-h2">${esc(s)}</div>`; return; }
+    const rientro = Math.min(3, Math.floor((riga.match(/^\s*/)[0].replace(/\t/g, '  ').length) / 2));
+    h += `<p class="dia-p"${rientro ? ` style="margin-inline-start:${rientro * 22}px"` : ''}>${esc(s)}</p>`;
+  });
+  return h;
+}
+
+function drawDiario() {
+  const box = $('#p-diario'); if (!box) return;
+  const tot = diarioPag.length;
+  let h = head(t('diario.eye'), t('diario.title'), t('diario.sub'));
+  h += `<div class="dia-bar"><div class="add-pensiero" onclick="diarioApri()">＋ ${t('diario.add')}</div>`
+     + (tot ? `<button class="btn2" onclick="diarioIndice=!diarioIndice;drawDiario()">☰ ${t('diario.indice')} · ${tot}</button>` : '') + '</div>';
+
+  if (!tot) { box.innerHTML = h + `<div class="empty">${t('diario.vuoto')}</div>`; return; }
+
+  if (diarioIndice) {
+    h += '<div class="dia-indice">' + diarioPag.map((x, i) => i).reverse().map(i => {
+      const x = diarioPag[i];
+      return `<div class="dia-voce ${i === diarioIdx ? 'sel' : ''}" onclick="diarioVai(${i})">
+        <span class="dia-voce-n">${i + 1}</span>
+        <span class="dia-voce-t">${esc(x.titolo || t('diario.senza_titolo'))}</span>
+        <span class="dia-voce-d">${esc(diarioData(x.giorno, { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>`;
+    }).join('') + '</div>';
+  }
+
+  const x = diarioPag[diarioIdx];
+  const prima = diarioIdx > 0, dopo = diarioIdx < tot - 1;
+  h += `<article class="dia-page" id="dia-page">
+    <div class="dia-top">
+      <span class="dia-date">${esc(diarioData(x.giorno, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</span>
+      <span class="dia-acts"><button class="tb" title="${t('diario.modifica')}" onclick="diarioApri('${x.id}')">✎</button><button class="tb no" title="${t('diario.elimina')}" onclick="diarioElimina('${x.id}')">🗑</button></span>
+    </div>
+    ${x.titolo ? `<h2 class="dia-title" dir="auto">${esc(x.titolo)}</h2>` : ''}
+    <div class="dia-body" dir="auto">${diarioFmt(x.testo)}</div>
+    <div class="dia-foot">
+      <button class="dia-nav" ${prima ? '' : 'disabled'} onclick="diarioVai(${diarioIdx - 1})">‹ ${t('diario.prec')}</button>
+      <span class="dia-num">${diarioIdx + 1} / ${tot}</span>
+      <button class="dia-nav" ${dopo ? '' : 'disabled'} onclick="diarioVai(${diarioIdx + 1})">${t('diario.succ')} ›</button>
+    </div>
+  </article>`;
+  box.innerHTML = h;
+
+  /* sfogliare col dito: strisciata orizzontale sulla pagina */
+  const pg = $('#dia-page'); let x0 = null, y0 = null;
+  pg.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  pg.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const avanti = (dx < 0) !== (document.documentElement.dir === 'rtl');
+    diarioVai(diarioIdx + (avanti ? 1 : -1));
+  }, { passive: true });
+}
+
+function diarioVai(i) {
+  if (i < 0 || i >= diarioPag.length) return;
+  diarioIdx = i; diarioIndice = false;
+  drawDiario(); window.scrollTo(0, 0);
+}
+
+/* frecce della tastiera: sfogliano solo quando si sta leggendo il diario */
+document.addEventListener('keydown', e => {
+  if (paginaAttiva !== 'diario' || document.querySelector('.veil.on')) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''))) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const avanti = (e.key === 'ArrowRight') !== (document.documentElement.dir === 'rtl');
+  diarioVai(diarioIdx + (avanti ? 1 : -1));
+});
+
+/* ---- modale pagina ---- */
+function diarioApri(id) {
+  diarioEditId = id || null;
+  const x = id ? diarioPag.find(p => p.id === id) : null;
+  $('#di-h2').textContent = t(id ? 'diario.m_edit' : 'diario.m_new');
+  $('#di-giorno').value = x ? x.giorno : store.today();
+  $('#di-titolo').value = x ? x.titolo || '' : '';
+  $('#di-testo').value = x ? x.testo || '' : '';
+  $('#veil-diario').classList.add('on');
+  setTimeout(() => {
+    const el = $(x ? '#di-testo' : '#di-titolo');
+    el.focus();
+    if (x) { el.setSelectionRange(0, 0); el.scrollTop = 0; }   /* in modifica si parte dall'inizio della pagina */
+  }, 50);
+}
+function diarioChiudi() { $('#veil-diario').classList.remove('on'); diarioEditId = null; }
+
+async function diarioSalva() {
+  const row = { giorno: $('#di-giorno').value, titolo: $('#di-titolo').value.trim(), testo: $('#di-testo').value.replace(/\s+$/, '') };
+  if (!row.giorno) { toast(t('diario.err_giorno')); return; }
+  if (!row.testo && !row.titolo) { toast(t('diario.err_vuoto')); return; }
+  const q = diarioEditId
+    ? sb.from('diario').update(row).eq('id', diarioEditId).select('id').single()
+    : sb.from('diario').insert(row).select('id').single();
+  const { data, error } = await q;
+  if (error) { toast(t('diario.errore') + error.message); return; }
+  diarioChiudi();
+  toast(t('diario.salvato'));
+  renderDiario(data && data.id);
+}
+
+async function diarioElimina(id) {
+  if (!confirm(t('diario.conferma_del'))) return;
+  const { error } = await sb.from('diario').delete().eq('id', id);
+  if (error) { toast(t('diario.errore') + error.message); return; }
+  toast(t('diario.eliminato'));
+  const vicina = diarioPag[diarioIdx + 1] || diarioPag[diarioIdx - 1];
+  renderDiario(vicina && vicina.id);
 }
