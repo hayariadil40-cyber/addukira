@@ -1,8 +1,10 @@
 /* Service worker: network-first.
+   A ogni rilascio: alza CACHE qui e il numero ?v= su script e css in index.html
+   (GitHub Pages tiene i file in cache 10 minuti: senza ?v= il browser usa i vecchi).
    In sviluppo prende sempre i file freschi dal server; la cache serve
    solo come rete di sicurezza quando si è offline.
    Si attiva solo se l'app è servita via http(s). */
-const CACHE = 'addukira-v12';
+const CACHE = 'addukira-v13';
 const SHELL = ['./', './index.html', './css/style.css',
   './js/supabase-config.js', './js/auth.js', './js/store.js', './js/i18n.js',
   './js/widgets.js', './js/app.js', './manifest.webmanifest',
