@@ -46,6 +46,42 @@ const JUZ_START = [[1,1],[2,142],[2,253],[3,93],[4,24],[4,148],[5,82],[6,111],
 [25,21],[27,56],[29,46],[33,31],[36,28],[39,32],[41,47],[46,1],[51,31],
 [58,1],[67,1],[78,1]];
 
+/* prima aya (indice globale 1–6236) di ognuno dei 240 quarti di ḥizb — dato canonico,
+   dalle colonne ayat.hizb/rubu. È l'unità di misura della lettura: i quarti hanno
+   lunghezza simile, i versetti no (un quarto ne contiene da 9 a 86). 4 quarti = 1 ḥizb,
+   8 = 1 juz. Il piano del khatam si divide su questi, non sul numero di versetti. */
+const RUBU_START = [1,33,51,67,82,99,113,131,149,165,184,196,210,226,240,250,260,270,279,290,308,326,345,368,386,406,426,446,464,479,494,505,517,529,551,567,581,593,607,628,641,656,670,681,696,710,720,736,751,766,778,802,825,848,863,884,900,916,930,940,955,985,1001,1019,1042,1071,1096,1110,1125,1143,1161,1182,1201,1221,1236,1254,1269,1281,1295,1310,1328,1346,1357,1375,1390,1417,1435,1454,1479,1497,1514,1534,1557,1581,1603,1626,1649,1673,1697,1712,1726,1742,1760,1778,1803,1852,1902,1931,1952,1976,1991,2012,2030,2052,2079,2099,2128,2157,2172,2191,2215,2239,2272,2309,2349,2403,2431,2459,2484,2512,2534,2566,2596,2614,2633,2655,2674,2709,2748,2792,2812,2826,2844,2856,2876,2908,2933,2984,3043,3113,3160,3186,3215,3241,3264,3281,3303,3328,3341,3366,3386,3410,3440,3463,3491,3514,3534,3551,3564,3584,3593,3616,3630,3652,3675,3701,3733,3765,3810,3871,3933,3991,4022,4066,4090,4111,4134,4154,4174,4199,4227,4243,4265,4285,4299,4323,4349,4382,4431,4485,4511,4531,4555,4578,4601,4613,4626,4657,4706,4759,4810,4855,4902,4980,5054,5091,5105,5118,5137,5157,5178,5192,5218,5230,5242,5272,5324,5394,5448,5495,5552,5610,5673,5759,5830,5885,5949,6024,6091,6155];
+const TOTALE_RUBU = 240;
+
+/* quanti quarti sono stati letti arrivati al versetto n (0–6236): dentro un quarto si va in proporzione ai versetti */
+function quartiLetti(n) {
+  if (n <= 0) return 0;
+  if (n >= TOTALE_AYA) return TOTALE_RUBU;
+  let i = 0;
+  while (i + 1 < TOTALE_RUBU && RUBU_START[i + 1] - 1 <= n) i++;
+  const base = RUBU_START[i] - 1, fine = (i + 1 < TOTALE_RUBU ? RUBU_START[i + 1] : TOTALE_AYA + 1) - 1;
+  return i + (n - base) / (fine - base);
+}
+/* l'inverso: a che versetto si arriva dopo q quarti */
+function versettoDaQuarti(q) {
+  if (q <= 0) return 0;
+  if (q >= TOTALE_RUBU) return TOTALE_AYA;
+  const i = Math.floor(q + 1e-9), f = Math.max(0, q - i);
+  const base = RUBU_START[i] - 1, fine = (i + 1 < TOTALE_RUBU ? RUBU_START[i + 1] : TOTALE_AYA + 1) - 1;
+  return Math.round(base + f * (fine - base));
+}
+/* la porzione di un giorno detta come la direbbe un lettore: juz, ḥizb o quarti */
+function quotaLettura(q) {
+  const n = (x, passo) => {
+    const r = Math.round(x / passo) * passo;
+    return (Math.abs(r - x) > 0.004 ? '≈ ' : '') + r.toLocaleString('it-IT', { maximumFractionDigits: 2 });
+  };
+  if (q >= 7.5) return n(q / 8, 0.5) + ' juz';
+  if (q >= 1.5) return n(q / 4, 0.25) + ' ḥizb';
+  const r = Math.max(0.25, Math.round(q * 4) / 4);
+  return (Math.abs(r - q) > 0.004 ? '≈ ' : '') + r.toLocaleString('it-IT', { maximumFractionDigits: 2 }) + (r === 1 ? ' quarto di ḥizb' : ' quarti di ḥizb');
+}
+
 /* impostazioni di partenza: restano locali finché non le salvi */
 const SETTINGS_DEFAULT = {
   /* UTC è il riferimento: gli orari si leggono sempre lì, e accanto
@@ -887,7 +923,7 @@ const store = (() => {
       const k = this.activeKhatam();
       if (k) {
         const p = this._ayaDaIndice(k.aya_id || 1);
-        return { sura_id: p.sura, aya: p.aya, numero: k.numero, attivo: true, khatam: this.khatamDone(), pct: Math.round((k.aya_id || 0) / TOTALE_AYA * 100) };
+        return { sura_id: p.sura, aya: p.aya, numero: k.numero, attivo: true, khatam: this.khatamDone(), pct: (k.aya_id || 0) >= TOTALE_AYA ? 100 : Math.min(99, Math.round(quartiLetti(k.aya_id || 0) / TOTALE_RUBU * 100)) };
       }
       return { sura_id: 1, aya: 0, numero: 0, attivo: false, khatam: this.khatamDone(), pct: 0 };
     },
@@ -925,18 +961,23 @@ const store = (() => {
       const d0 = new Date(k.iniziato_il + 'T12:00:00'), d1 = new Date(k.scadenza + 'T12:00:00'), dn = new Date(oggi + 'T12:00:00');
       const totGiorni = Math.max(1, Math.round((d1 - d0) / GG) + 1);
       const giorno = Math.min(totGiorni, Math.max(1, Math.round((dn - d0) / GG) + 1));
-      const alGiorno = TOTALE_AYA / totGiorni;
-      const target = Math.min(TOTALE_AYA, Math.round(alGiorno * giorno));
-      const inizioOggi = Math.round(alGiorno * (giorno - 1));
+      /* il Corano si divide in parti uguali di LETTURA (quarti di ḥizb), non di versetti:
+         così un giorno di sure lunghe pesa quanto un giorno di sure brevi */
+      const qGiorno = TOTALE_RUBU / totGiorni;
+      const target = versettoDaQuarti(qGiorno * giorno);
+      const inizioOggi = versettoDaQuarti(qGiorno * (giorno - 1));
       const pos = k.aya_id || 0;
       return {
-        totGiorni, giorno, alGiorno: Math.round(alGiorno), target, pos, inizioOggi,
+        totGiorni, giorno, target, pos, inizioOggi,
+        quota: quotaLettura(qGiorno),                       /* «1 ḥizb», «≈ 0,5 juz»… al giorno */
+        alGiorno: Math.max(1, target - inizioOggi),         /* versetti della porzione di oggi: cambia da un giorno all'altro */
         scarto: pos - inizioOggi,
+        scartoGiorni: (quartiLetti(pos) - qGiorno * (giorno - 1)) / qGiorno,
         daLeggereOggi: Math.max(0, target - pos),
         partireDa: this._ayaDaIndice(Math.max(pos, inizioOggi) + 1),
         fermarsiA: this._ayaDaIndice(target),
         pctPiano: Math.min(100, Math.round(giorno / totGiorni * 100)),
-        pctLetto: Math.min(100, Math.round(pos / TOTALE_AYA * 100)),
+        pctLetto: Math.min(100, Math.round(quartiLetti(pos) / TOTALE_RUBU * 100)),
         scaduto: oggi > k.scadenza,
         giorniRimasti: Math.max(0, totGiorni - giorno),
       };

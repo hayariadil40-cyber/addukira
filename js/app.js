@@ -308,13 +308,13 @@ function renderLettura() {
   const P = active ? store.pianoKhatam() : null;
   if (P) {
     const avanti = P.scarto >= 0;
-    const gg = Math.abs(P.scarto) / Math.max(1, P.alGiorno);
+    const gg = Math.abs(P.scartoGiorni);
     html += `<div class="piano ${avanti ? 'ok' : 'late'} ${P.scaduto ? 'over' : ''}">
       <div class="pi-top">
         <div><span class="pi-g">Giorno ${P.giorno} di ${P.totGiorni}</span>
-          <span class="pi-s">${P.alGiorno} versetti al giorno${P.giorniRimasti ? ` · ${P.giorniRimasti} giorni rimasti` : ' · ultimo giorno'}</span></div>
+          <span class="pi-s">${esc(P.quota)} al giorno${P.giorniRimasti ? ` · ${P.giorniRimasti} giorni rimasti` : ' · ultimo giorno'}</span></div>
         <div class="pi-badge">${P.scarto === 0 ? 'in pari'
-        : avanti ? `avanti di ${P.scarto}` : `indietro di ${-P.scarto}`}
+        : avanti ? `avanti di ${P.scarto} versetti` : `indietro di ${-P.scarto} versetti`}
         ${P.scarto !== 0 && gg >= 0.5 ? `<span class="pi-gg">≈ ${gg.toFixed(1)} giorni</span>` : ''}</div>
       </div>
       <div class="prog prog2">
@@ -473,7 +473,7 @@ function avviaKhatam() {
   store.newKhatam(fine);
   renderLettura();
   const P = store.pianoKhatam();
-  toast(P ? `Khatam avviato · ${P.alGiorno} versetti al giorno` : 'Khatam avviato');
+  toast(P ? `Khatam avviato · ${P.quota} al giorno` : 'Khatam avviato');
 }
 
 /* dal lettore alla scheda del versetto: stesso testo, ma con tutto intorno.

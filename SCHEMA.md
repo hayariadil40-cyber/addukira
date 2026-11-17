@@ -36,6 +36,7 @@ Man mano che si lavora sulle pagine. Data · pagina · cosa serve · dove impatt
 | 2026-07-25 | pagina Lettura | il khatam si dà un **periodo** e va frazionato in parti uguali | `khatam.iniziato_il` · `scadenza` · `completato_il` |
 | 2026-07-25 | pagina Lettura | «Ferma» ed «Elimina» erano identici: mancava il ritorno | `khatam.stato = 'sospeso'` riprendibile |
 | 2026-07-25 | pagina Lettura | marcatori juz nel flusso | risolto in costante (30 confini), nessuna colonna |
+| 2026-11-17 | pagina Lettura | il piano del khatam va diviso in parti uguali di **lettura**, non di versetti (un quarto di ḥizb ne ha da 9 a 86) | costante `RUBU_START` (240 confini, da `ayat.hizb`/`rubu`), nessuna colonna |
 | 2026-07-25 | pagina Lettura | marcatori **pagina** del muṣḥaf: bloccati finché il dato non c'è | `ayat.pagina` — requisito, non opzionale |
 | 2026-07-25 | pagina Memorizzazione | senza data non esiste nessuna statistica di ritmo | `memorizzazione.data` per ogni versetto |
 | 2026-07-25 | pagina Memorizzazione | piano con obiettivo e periodo, **uno solo attivo** | nuova tabella `piani_mem` |
