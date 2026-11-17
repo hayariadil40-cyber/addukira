@@ -4049,7 +4049,7 @@ async function cassaDonSalva() {
    dello store: si legge da Supabase a ogni apertura della pagina.
    Le pagine sono in ordine di giorno; si apre sull'ultima scritta.
    ============================================================ */
-let diarioPag = [], diarioIdx = -1, diarioEditId = null, diarioIndice = false;
+let diarioPag = [], diarioIdx = -1, diarioEditId = null, diarioIndice = false, diarioMese = null;
 
 const diarioLoc = () => store.getLang() === 'ar' ? 'ar-MA' : 'it-IT';
 const diarioData = (g, opt) => new Date(g + 'T12:00:00').toLocaleDateString(diarioLoc(), opt);
@@ -4063,6 +4063,7 @@ async function renderDiario(tieniId) {
   diarioPag = data || [];
   const i = tieniId ? diarioPag.findIndex(x => x.id === tieniId) : -1;
   diarioIdx = i >= 0 ? i : diarioPag.length - 1;
+  diarioMese = (diarioPag[diarioIdx] ? diarioPag[diarioIdx].giorno : store.today()).slice(0, 7);
   drawDiario();
 }
 
@@ -4093,6 +4094,45 @@ function diarioFmt(testo) {
   return h;
 }
 
+/* calendario a fianco: i giorni scritti sono pieni, quello aperto è scuro.
+   Un tocco su un giorno scritto apre la sua pagina (se sono più d'una, le scorre);
+   su un giorno bianco apre una pagina nuova con quella data. */
+function diarioCal() {
+  const [y, m] = diarioMese.split('-').map(Number);
+  const perGiorno = {};
+  diarioPag.forEach(x => { perGiorno[x.giorno] = (perGiorno[x.giorno] || 0) + 1; });
+  const aperto = diarioPag[diarioIdx] ? diarioPag[diarioIdx].giorno : '', oggi = store.today();
+  const nome = new Date(y, m - 1, 15).toLocaleDateString(diarioLoc(), { month: 'long', year: 'numeric' });
+  const sett = [...Array(7)].map((_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(diarioLoc(), { weekday: 'narrow' }));   /* 1/1/2024 = lunedì */
+  const vuoti = (new Date(y, m - 1, 1).getDay() + 6) % 7, giorni = new Date(y, m, 0).getDate();
+  let celle = '<i></i>'.repeat(vuoti);
+  for (let d = 1; d <= giorni; d++) {
+    const g = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`, n = perGiorno[g] || 0;
+    const cls = [n ? 'ha' : '', g === aperto ? 'sel' : '', g === oggi ? 'oggi' : ''].filter(Boolean).join(' ');
+    celle += `<button class="${cls}" onclick="diarioGiorno('${g}')">${d}${n > 1 ? `<sup>${n}</sup>` : ''}</button>`;
+  }
+  const nelMese = diarioPag.filter(x => x.giorno.slice(0, 7) === diarioMese).length;
+  return `<aside class="dia-cal">
+    <div class="dia-cal-top"><button class="dia-cal-nav" onclick="diarioMeseVai(-1)">‹</button><b>${esc(nome)}</b><button class="dia-cal-nav" onclick="diarioMeseVai(1)">›</button></div>
+    <div class="dia-cal-grid dia-cal-sett">${sett.map(x => `<span>${esc(x)}</span>`).join('')}</div>
+    <div class="dia-cal-grid">${celle}</div>
+    <div class="dia-cal-ft"><span>${nelMese} ${t(nelMese === 1 ? 'diario.cal_pagina' : 'diario.cal_pagine')}</span><button class="dia-cal-oggi" onclick="diarioMese=store.today().slice(0,7);drawDiario()">${t('diario.cal_oggi')}</button></div>
+  </aside>`;
+}
+
+function diarioMeseVai(d) {
+  const [y, m] = diarioMese.split('-').map(Number), n = new Date(y, m - 1 + d, 1);
+  diarioMese = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  drawDiario();
+}
+
+function diarioGiorno(g) {
+  const idx = diarioPag.map((x, i) => x.giorno === g ? i : -1).filter(i => i >= 0);
+  if (!idx.length) { diarioApri(null, g); return; }
+  const pos = idx.indexOf(diarioIdx);
+  diarioVai(idx[(pos + 1) % idx.length], true);   /* già su quel giorno: passa alla pagina successiva dello stesso giorno */
+}
+
 function drawDiario() {
   const box = $('#p-diario'); if (!box) return;
   const tot = diarioPag.length;
@@ -4114,7 +4154,7 @@ function drawDiario() {
 
   const x = diarioPag[diarioIdx];
   const prima = diarioIdx > 0, dopo = diarioIdx < tot - 1;
-  h += `<article class="dia-page" id="dia-page">
+  h += `<div class="dia-layout">${diarioCal()}<article class="dia-page" id="dia-page">
     <div class="dia-top">
       <span class="dia-date">${esc(diarioData(x.giorno, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</span>
       <span class="dia-acts"><button class="tb" title="${t('diario.modifica')}" onclick="diarioApri('${x.id}')">✎</button><button class="tb no" title="${t('diario.elimina')}" onclick="diarioElimina('${x.id}')">🗑</button></span>
@@ -4126,7 +4166,7 @@ function drawDiario() {
       <span class="dia-num">${diarioIdx + 1} / ${tot}</span>
       <button class="dia-nav" ${dopo ? '' : 'disabled'} onclick="diarioVai(${diarioIdx + 1})">${t('diario.succ')} ›</button>
     </div>
-  </article>`;
+  </article></div>`;
   box.innerHTML = h;
 
   /* sfogliare col dito: strisciata orizzontale sulla pagina */
@@ -4141,10 +4181,11 @@ function drawDiario() {
   }, { passive: true });
 }
 
-function diarioVai(i) {
+function diarioVai(i, fermo) {
   if (i < 0 || i >= diarioPag.length) return;
   diarioIdx = i; diarioIndice = false;
-  drawDiario(); window.scrollTo(0, 0);
+  diarioMese = diarioPag[i].giorno.slice(0, 7);   /* il calendario segue la pagina aperta */
+  drawDiario(); if (!fermo) window.scrollTo(0, 0);
 }
 
 /* frecce della tastiera: sfogliano solo quando si sta leggendo il diario */
@@ -4157,11 +4198,11 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---- modale pagina ---- */
-function diarioApri(id) {
+function diarioApri(id, giorno) {
   diarioEditId = id || null;
   const x = id ? diarioPag.find(p => p.id === id) : null;
   $('#di-h2').textContent = t(id ? 'diario.m_edit' : 'diario.m_new');
-  $('#di-giorno').value = x ? x.giorno : store.today();
+  $('#di-giorno').value = x ? x.giorno : (giorno || store.today());
   $('#di-titolo').value = x ? x.titolo || '' : '';
   $('#di-testo').value = x ? x.testo || '' : '';
   $('#veil-diario').classList.add('on');
